@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# Credentials, sessions and raw captures: never commit these
+auth*.json
+.env
+*.har
+captures/
+
+# macOS
+.DS_Store
