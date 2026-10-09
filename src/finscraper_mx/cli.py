@@ -1,7 +1,7 @@
 """Command line for trying providers by hand.
 
     finscraper-mx list
-    finscraper-mx balances bbva_mx --auth auth.json
+    finscraper-mx balances <institution> --auth auth.json
 
 Credentials are read from a JSON file (never from arguments, which end up in shell history).
 """
@@ -26,14 +26,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "list":
-        for id, provider in sorted(PROVIDERS.items()):
+        for id in sorted(PROVIDERS):
+            try:
+                provider = get_provider(id)
+            except ImportError as error:
+                print(f"{id:<16} ({error})")
+                continue
             print(f"{id:<16} {provider.name:<24} auth: {', '.join(provider.auth_fields) or '-'}")
         return 0
 
     try:
         provider = get_provider(args.institution)(**json.loads(args.auth.read_text()))
         result = [balance.to_dict() for balance in provider.fetch_balances()]
-    except (KeyError, OSError, json.JSONDecodeError, FinscraperError, NotImplementedError) as error:
+    except (KeyError, ImportError, OSError, json.JSONDecodeError, FinscraperError, NotImplementedError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     json.dump(result, sys.stdout, indent=2, ensure_ascii=False)

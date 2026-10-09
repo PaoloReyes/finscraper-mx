@@ -10,12 +10,12 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 
 | Id | Institution | Status | Auth |
 |---|---|---|---|
-| `bbva_mx` | BBVA México | 🚧 planned | browser session (cookie + XSRF token) |
+| `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 
 ## Install
 
 ```bash
-pip install "finscraper-mx[bbva-mx] @ git+https://github.com/PaoloReyes/finscraper-mx"
+pip install "finscraper-mx[bitso] @ git+https://github.com/PaoloReyes/finscraper-mx"
 ```
 
 Each institution is an optional extra, so you only install the dependencies you use (`[all]` installs every one).
@@ -25,16 +25,16 @@ Each institution is an optional extra, so you only install the dependencies you 
 ```python
 from finscraper_mx import get_provider
 
-provider = get_provider("bbva_mx")(cookie="…", xsrf_token="…")
+provider = get_provider("bitso")(api_key="…", api_secret="…")
 for balance in provider.fetch_balances():
-    print(balance.account, balance.amount, balance.currency)
+    print(balance.account, balance.amount, balance.currency)  # one row per asset, valued in MXN
 ```
 
 Or from the command line, with the auth fields in a JSON file:
 
 ```bash
 finscraper-mx list
-finscraper-mx balances bbva_mx --auth auth.json
+finscraper-mx balances bitso --auth auth.json
 ```
 
 Providers raise `AuthRequired` (missing credentials), `SessionExpired` (log in again) or `LayoutChanged`
