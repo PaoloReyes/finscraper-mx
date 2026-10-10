@@ -23,12 +23,17 @@ Install once; all providers are included.
 
 ## Use
 
+Every provider works the same way: build it with its auth fields (see the table above) and call
+`fetch_balances()`.
+
 ```python
 from finscraper_mx import get_provider
 
 provider = get_provider("bitso")(api_key="…", api_secret="…")
+# provider = get_provider("gbm")(refresh_token="…")   # same shape, different auth fields
+
 for balance in provider.fetch_balances():
-    print(balance.account, balance.amount, balance.currency)  # one row per asset, valued in MXN
+    print(balance.account, balance.amount, balance.currency)
 ```
 
 Or from the command line, with the auth fields in a JSON file:
@@ -38,38 +43,20 @@ finscraper-mx list
 finscraper-mx balances bitso --auth auth.json
 ```
 
-Providers raise `AuthRequired` (missing credentials), `SessionExpired` (log in again) or `LayoutChanged`
-(the institution changed something and the provider needs an update).
+Providers raise `AuthRequired` (missing credentials), `SessionExpired` (the session lapsed — renew the
+credential) or `LayoutChanged` (the institution changed something and the provider needs an update).
 
-### GBM+ (refresh-token flow)
+### Obtaining credentials
 
-GBM uses an MFA login once, then a long-lived refresh token for silent reads:
+Each provider's auth fields are credentials you create once and store yourself (the library is stateless
+and never persists them):
 
-```python
-from finscraper_mx.institutions.gbm import Gbm
-
-gbm = Gbm(token_file="gbm_tokens.json", user="you@example.com")  # reads/writes the refresh token
-
-try:
-    balances = gbm.fetch_balances()        # silent refresh; discovers contracts + all active strategies
-except SessionExpired:                     # refresh token lapsed
-    gbm.renew(password, "123456")          # one-time MFA login; stores a new refresh token
-    balances = gbm.fetch_balances()
-
-for b in balances:
-    ...   # Balance(account="ETFs"/"Fibras"/"Smart Cash", amount=..., currency="MXN")
-```
-
-Everything routes through the one `Gbm`:
-- `token_file=` → it loads the refresh token and rewrites it (owner-only) on `renew()`; or pass
-  `refresh_token=` to keep it stateless and store it yourself.
-- Accounts are discovered from the contract(s) by default — pass `contract_id="<uuid>"` or
-  `accounts={"<name>": "<legacy_id>"}` to pin them. `Gbm(...).list_accounts()` just enumerates them.
-
-Your ids, refresh token and password live only in local gitignored files — never in the repo.
-
-> GBM is unofficial and reverse-engineered; automated access may be against GBM's terms of use, and the
-> refresh token is trade-capable. Keep this repo private and the token files off any shared host.
+- **Bitso** — a read-only API key from Bitso's site.
+- **GBM** — a `refresh_token` from a one-time MFA login:
+  `get_provider("gbm").login(user, password, code)` returns it. Reuse it until it expires (then log in
+  again). GBM optionally takes `contract_id` / `accounts` to pin strategies, and `location=(lat, lon)`.
+  It is unofficial and reverse-engineered; automated access may be against GBM's terms, and the refresh
+  token is trade-capable — keep it off shared hosts.
 
 ## Design
 

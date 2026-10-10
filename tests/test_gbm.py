@@ -5,13 +5,12 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from finscraper_mx import AccountKind, AuthRequired, SessionExpired
+from finscraper_mx import AccountKind, AuthRequired, SessionExpired, get_provider
 from finscraper_mx.institutions.gbm import Gbm
 
 ACCOUNTS = {"ETFs": "BWO00001", "Fibras": "BWO00002"}
 VALUES = {"BWO00001": "302933.11", "BWO00002": "291344.62", "BWO00003": "0.00"}
 CONTRACT = "contract-123"
-# what the accounts-listing endpoint returns: two active, one deprecated, one inactive
 ACCOUNT_ROWS = [
     {"name": "ETFs", "legacy_contract_id": "BWO00001", "status": "active"},
     {"name": "Fibras", "legacy_contract_id": "BWO00002", "status": "active"},
@@ -28,12 +27,6 @@ def fake_api(refresh_ok=True):
             if not refresh_ok:
                 return httpx.Response(401, json={"message": "Unauthorized"})
             return httpx.Response(200, json={"id": "Success", "accessToken": "fresh-access-token"})
-        if path == "/api/v1/session/user":
-            return httpx.Response(200, json={"challengeInfo": {"session": "sess"}})
-        if path == "/api/v1/session/user/challenge":
-            return httpx.Response(200, json={"authorizationCode": "authz"})
-        if path == "/api/v1/session/token":
-            return httpx.Response(200, json={"accessToken": "a", "refreshToken": "minted-refresh"})
         if path == "/v2/onboarding/contracts":
             return httpx.Response(200, json=[{"id": CONTRACT}])
         if path == f"/v1/dashboard/contracts/{CONTRACT}/accounts":
@@ -41,35 +34,21 @@ def fake_api(refresh_ok=True):
             return httpx.Response(200, json=ACCOUNT_ROWS)
         if path.endswith("/Operation/GetContractBuyingPower"):
             assert request.headers["Authorization"] == "Bearer fresh-access-token"
-            book = json.loads(request.content)["request"]
-            return httpx.Response(200, json={"marketValueTotal": VALUES[book]})
+            return httpx.Response(200, json={"marketValueTotal": VALUES[json.loads(request.content)["request"]]})
         return httpx.Response(404, json={})
 
     return httpx.Client(transport=httpx.MockTransport(handler), base_url="https://auth.gbm.com")
 
 
+def test_requires_refresh_token():
+    with pytest.raises(AuthRequired, match="refresh_token"):
+        get_provider("gbm")()
+
+
 def test_discovers_contract_and_reads_all_by_default():
-    # only a refresh token: discovers the contract, lists active strategies, reads each
-    provider = Gbm(refresh_token="rt", client=fake_api())
+    provider = get_provider("gbm")(refresh_token="rt", client=fake_api())
     names = {b.account for b in provider.fetch_balances()}
     assert names == {"ETFs", "Fibras", "Smart Cash"}
-
-
-def test_no_session_raises_session_expired():
-    with pytest.raises(SessionExpired):
-        Gbm(accounts=ACCOUNTS, client=fake_api()).fetch_balances()
-
-
-def test_token_file_is_loaded_then_renewed_and_rewritten(tmp_path):
-    token_file = tmp_path / "gbm_tokens.json"
-    token_file.write_text(json.dumps({"refreshToken": "rt"}))
-    # loads the refresh token from the file
-    provider = Gbm(token_file=token_file, user="me@example.com", accounts=ACCOUNTS, client=fake_api())
-    assert sum(b.amount for b in provider.fetch_balances()) == Decimal("594277.73")
-    # renew() logs in and rewrites the file with the new refresh token (owner-only)
-    assert provider.renew("pw", "123456") == "minted-refresh"
-    assert json.loads(token_file.read_text())["refreshToken"] == "minted-refresh"
-    assert oct(token_file.stat().st_mode)[-3:] == "600"
 
 
 def test_reads_explicit_accounts_in_mxn():
@@ -81,26 +60,14 @@ def test_reads_explicit_accounts_in_mxn():
     assert balances["ETFs"].currency == "MXN"
 
 
-def test_auto_lists_active_strategies_by_default():
-    provider = Gbm(refresh_token="rt", contract_id=CONTRACT, client=fake_api())
-    names = {b.account for b in provider.fetch_balances()}
-    assert names == {"ETFs", "Fibras", "Smart Cash"}  # Deprecated1 and Closed excluded
-
-
-def test_list_accounts_helper():
-    provider = Gbm(refresh_token="rt", contract_id=CONTRACT, client=fake_api())
-    assert provider.list_accounts() == {"ETFs": "BWO00001", "Fibras": "BWO00002", "Smart Cash": "BWO00003"}
-
-
 def test_total_matches_dashboard():
-    provider = Gbm(refresh_token="rt", accounts=ACCOUNTS, client=fake_api())
-    assert sum(b.amount for b in provider.fetch_balances()) == Decimal("594277.73")
+    total = sum(b.amount for b in Gbm(refresh_token="rt", accounts=ACCOUNTS, client=fake_api()).fetch_balances())
+    assert total == Decimal("594277.73")
 
 
 def test_expired_refresh_token_raises_session_expired():
-    provider = Gbm(refresh_token="stale", accounts=ACCOUNTS, client=fake_api(refresh_ok=False))
     with pytest.raises(SessionExpired):
-        provider.fetch_balances()
+        Gbm(refresh_token="stale", accounts=ACCOUNTS, client=fake_api(refresh_ok=False)).fetch_balances()
 
 
 def test_reads_across_multiple_contracts_with_disambiguation():
@@ -127,6 +94,12 @@ def test_reads_across_multiple_contracts_with_disambiguation():
     assert balances == {"ETFs": Decimal("100.00"), "ETFs (bbbb)": Decimal("200.00"), "Fibras": Decimal("300.00")}
 
 
+def test_location_is_customer_managed():
+    gbm = Gbm(refresh_token="rt", location=(12.34, -56.78))
+    assert gbm._client.headers["device-latitude"] == "12.34"
+    assert gbm._client.headers["device-longitude"] == "-56.78"
+
+
 def test_login_returns_a_refresh_token():
     def handler(request):
         path = request.url.path
@@ -140,9 +113,3 @@ def test_login_returns_a_refresh_token():
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://auth.gbm.com")
     assert Gbm.login("me@example.com", "pw", "123456", client=client) == "new-refresh"
-
-
-def test_location_is_customer_managed():
-    gbm = Gbm(refresh_token="rt", location=(12.34, -56.78))
-    assert gbm._client.headers["device-latitude"] == "12.34"
-    assert gbm._client.headers["device-longitude"] == "-56.78"

@@ -2,28 +2,24 @@
 
 Read-only: refreshes a session and reads account values. No order or transfer code.
 
-Everything routes through the single `Gbm` provider:
-  - `Gbm(...).fetch_balances()` silently refreshes the session and returns a `Balance` per strategy;
-    it raises `SessionExpired` when the refresh token has lapsed.
-  - `Gbm(...).renew(password, code)` does the one-time MFA login and stores a new refresh token.
-  - The session comes from `refresh_token=...` (stateless) or a `token_file=...` the provider loads and
-    rewrites (owner-only). Accounts are discovered from the contract unless `contract_id`/`accounts` is given.
+Standard provider: build it with a `refresh_token` and call `fetch_balances()`, like any other provider.
+It silently refreshes the session, discovers the login's contracts and active strategies (or uses the
+`contract_id`/`accounts` you pass), and raises `SessionExpired` when the refresh token has lapsed.
 
-GBM's login requires a device location; pass your own via `location=(lat, lon)` (defaults to Mexico City).
+Obtaining the refresh token is a one-time setup, done with the `Gbm.login(user, password, code)` helper
+(GBM requires an MFA code once). GBM's login also needs a device location — pass `location=(lat, lon)`
+(defaults to Mexico City).
 
-Nothing account-specific is hardcoded (`CLIENT_ID` is GBM's public web client). Not affiliated with GBM;
-automated access may be against GBM's terms of use, and the refresh token is trade-capable — keep it
-(and any token file) off shared/exposed hosts.
+`CLIENT_ID` is GBM's public web client (same for every user). Not affiliated with GBM; automated access
+may be against GBM's terms of use, and the refresh token is trade-capable — keep it off shared hosts.
 """
 from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 import time
 from decimal import Decimal
-from pathlib import Path
 
 import httpx
 
@@ -53,14 +49,11 @@ def _client(client: httpx.Client | None, location: tuple[float, float]) -> httpx
 class Gbm(Provider):
     id = "gbm"
     name = "GBM+"
-    auth_fields = ()  # the session comes from a refresh_token or a token_file
+    auth_fields = ("refresh_token",)
 
     def __init__(
         self,
         *,
-        refresh_token: str | None = None,
-        token_file: str | Path | None = None,
-        user: str | None = None,
         accounts: dict[str, str] | None = None,
         contract_id: str | None = None,
         location: tuple[float, float] = DEFAULT_LOCATION,
@@ -68,65 +61,29 @@ class Gbm(Provider):
         **auth,
     ) -> None:
         super().__init__(**auth)
-        self.user = user
         self.accounts = dict(accounts) if accounts else None
         self.contract_id = contract_id
-        self.location = location
-        self.token_file = Path(token_file) if token_file else None
-        self._refresh_token = refresh_token or self._load_refresh()
         self._client = _client(client, location)
 
-    # --- balances ----------------------------------------------------------------------------
-
     def fetch_balances(self) -> list[Balance]:
-        if not self._refresh_token:
-            raise SessionExpired("gbm: no refresh token; call renew(password, code) to log in")
-        token = self._refresh(self._refresh_token)
+        token = self._refresh(self.auth["refresh_token"])
         accounts = self.accounts if self.accounts is not None else self._list_accounts(token)
         return [
             Balance(self.id, name, AccountKind.INVESTMENT, self._value(token, legacy), "MXN")
             for name, legacy in accounts.items()
         ]
 
-    def list_accounts(self) -> dict[str, str]:
-        """Every active strategy across the login's contracts, as {name: legacy_contract_id}."""
-        if not self._refresh_token:
-            raise SessionExpired("gbm: no refresh token; call renew(password, code) to log in")
-        return self._list_accounts(self._refresh(self._refresh_token))
-
-    # --- session -----------------------------------------------------------------------------
-
-    def renew(self, password: str, code: str) -> str:
-        """One-time MFA login (needs `user`). Stores the new refresh token (and to token_file). Returns it."""
-        if not self.user:
-            raise AuthRequired("gbm: renew() needs the account 'user' (email)")
-        refresh_token = self.login(self.user, password, code, client=self._client)
-        self._refresh_token = refresh_token
-        if self.token_file is not None:
-            self.token_file.write_text(json.dumps({"refreshToken": refresh_token}), encoding="utf-8")
-            os.chmod(self.token_file, 0o600)  # owner-only: it is trade-capable
-        return refresh_token
-
-    def _load_refresh(self) -> str | None:
-        if self.token_file is None:
-            return None
-        try:
-            return json.loads(self.token_file.read_text(encoding="utf-8")).get("refreshToken")
-        except (FileNotFoundError, json.JSONDecodeError):
-            return None
+    # --- internals ---------------------------------------------------------------------------
 
     def _refresh(self, refresh_token: str) -> str:
         """Exchange the refresh token for a fresh access token (GBM's own refresh endpoint; no MFA)."""
         r = self._client.post(f"{AUTH}/session/user/refresh", json={"clientId": CLIENT_ID, "refreshToken": refresh_token})
         body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
         if r.status_code >= 400 or body.get("id") != "Success" or not body.get("accessToken"):
-            raise SessionExpired("gbm: refresh token expired or invalid; call renew(password, code)")
+            raise SessionExpired("gbm: refresh token expired or invalid; get a new one with Gbm.login()")
         return body["accessToken"]
 
-    # --- discovery / reads -------------------------------------------------------------------
-
     def _discover_contracts(self, token: str) -> list[str]:
-        """Every contract id on this login, so the caller needn't know them."""
         r = self._client.get(CONTRACTS_URL, headers={"Authorization": "Bearer " + token})
         r.raise_for_status()
         data = r.json()
@@ -144,7 +101,6 @@ class Gbm(Provider):
         return ids
 
     def _accounts_for(self, token: str, contract_id: str) -> dict[str, str]:
-        """Active strategies under one contract (skips closed 'Deprecated' ones)."""
         r = self._client.get(
             f"{APPGBM}/dashboard/contracts/{contract_id}/accounts",
             headers={"Authorization": "Bearer " + token},
@@ -171,7 +127,6 @@ class Gbm(Provider):
         return merged
 
     def _value(self, token: str, legacy_contract_id: str) -> Decimal:
-        """Total market value (positions + cash) of one account, in MXN."""
         r = self._client.post(
             f"{HOMEBROKER}/Operation/GetContractBuyingPower",
             headers={"Authorization": "Bearer " + token},
@@ -187,10 +142,10 @@ class Gbm(Provider):
         password: str,
         code: str,
         *,
-        client: httpx.Client | None = None,
         location: tuple[float, float] = DEFAULT_LOCATION,
+        client: httpx.Client | None = None,
     ) -> str:
-        """One-time interactive login (password + 6-digit TOTP code). Returns a refresh token."""
+        """One-time setup: interactive login (password + 6-digit TOTP code). Returns a refresh token."""
         c = _client(client, location)
         verifier = _b64url(os.urandom(32))
         challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
