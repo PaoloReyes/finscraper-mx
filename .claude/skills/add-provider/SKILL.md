@@ -40,7 +40,7 @@ Read `CLAUDE.md` first. Every provider is used the same way — `get_provider(id
 
 8. **Run the gate** and fix anything red before committing:
    ```bash
-   .venv/bin/python .claude/hooks/check_compliance.py
+   .venv/bin/python .claude/hooks/precommit_gate.py --check
    ```
 
 ## Provider template
@@ -104,6 +104,6 @@ def test_reads_balances():
 
 ## Picking up an unfinished provider in a new chat
 
-1. `.venv/bin/python .claude/hooks/check_compliance.py` — the failures tell you what's missing (unregistered,
+1. `.venv/bin/python .claude/hooks/precommit_gate.py --check` — the failures tell you what's missing (unregistered,
    no test, not in README, interface drift, failing suite).
 2. Fix each reported item using the steps above until it reads `COMPLIANCE OK`.
