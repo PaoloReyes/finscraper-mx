@@ -18,7 +18,7 @@ Hard rules:
 Finish every task by running the gate and fixing everything until it reports `COMPLIANCE OK`:
 
 ```bash
-.venv/bin/python .claude/skills/precommit-compliance/scripts/check_compliance.py
+.venv/bin/python .claude/scripts/check_compliance.py
 ```
 
 Report what you changed and the final gate result. Do not commit or push unless asked.

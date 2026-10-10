@@ -6,7 +6,7 @@
       "Bash(git log:*)",
       "Bash(git add:*)",
       "Bash(.venv/bin/python -m pytest:*)",
-      "Bash(.venv/bin/python .claude/skills/precommit-compliance/scripts/check_compliance.py)"
+      "Bash(.venv/bin/python .claude/scripts/check_compliance.py)"
     ]
   },
   "hooks": {
