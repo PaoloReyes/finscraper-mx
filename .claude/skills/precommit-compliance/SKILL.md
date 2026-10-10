@@ -34,7 +34,7 @@ This repo keeps every provider uniform: the only public way to use one is
   direct-import examples.
 - **No tracked secrets.** No `*_tokens.json`, `*_config.json`, `*_values.json`, `auth*.json`, `.env`, or
   `.har` files are tracked.
-- **Architecture diagram up to date.** Every provider appears in the `AGENTS.md` mermaid diagram.
+- **Architecture diagram up to date.** Every provider appears in the `CLAUDE.md` mermaid diagram.
 - **Green suite.** `pytest` passes.
 
 ## When adding or renaming a provider

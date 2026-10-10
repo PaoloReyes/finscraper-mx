@@ -5,7 +5,7 @@ description: Add a new institution provider to finscraper-mx. Use when adding su
 
 # Add a provider to finscraper-mx
 
-Read `AGENTS.md` first. Every provider is used the same way — `get_provider(id)(**auth).fetch_balances()`
+Read `CLAUDE.md` first. Every provider is used the same way — `get_provider(id)(**auth).fetch_balances()`
 — and returns `list[Balance]`. Keep it that way; do not add provider-specific public read methods.
 
 ## Steps
@@ -29,7 +29,7 @@ Read `AGENTS.md` first. Every provider is used the same way — `get_provider(id
    amounts (never real data). Cover: reads values correctly, missing auth → `AuthRequired`, and the
    institution's quirks (expired session → `SessionExpired`, pagination, currency conversion, …).
 
-5. **Add a README row** to the supported-institutions table, and add the provider to the **`AGENTS.md`
+5. **Add a README row** to the supported-institutions table, and add the provider to the **`CLAUDE.md`
    architecture diagram** (and its providers table). Keep usage on the standard pattern.
 
 6. **Add `docs/flows/<id>.md`** — a detailed mermaid flow of the provider's auth + read calls (see the

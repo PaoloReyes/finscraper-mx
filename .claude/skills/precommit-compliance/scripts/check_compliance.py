@@ -60,11 +60,11 @@ for pid in PROVIDERS:
 check("get_provider(" in readme, "README shows the standard get_provider() usage")
 check("from finscraper_mx.institutions" not in readme, "README avoids direct-import examples (use get_provider)")
 
-section("architecture diagram up to date (AGENTS.md)")
-agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+section("architecture diagram up to date (CLAUDE.md)")
+agents = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
 diagram_match = re.search(r"```mermaid(.+?)```", agents, re.S)
 diagram = diagram_match.group(1) if diagram_match else ""
-check(bool(diagram.strip()), "AGENTS.md has a mermaid architecture diagram")
+check(bool(diagram.strip()), "CLAUDE.md has a mermaid architecture diagram")
 for pid in PROVIDERS:
     name = get_provider(pid).name
     check(name in diagram or pid in diagram, f"{pid}: shown in the architecture diagram ({name})")
