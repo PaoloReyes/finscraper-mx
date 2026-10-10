@@ -25,11 +25,11 @@ the documented "call" — never add provider-specific public read methods or dir
 
 ```mermaid
 flowchart LR
-  caller["caller / finscraper-mx CLI"] -->|get_provider(id)| reg["institutions registry<br/>(PROVIDERS)"]
-  reg --> prov["Provider subclass<br/>bitso · gbm · …"]
-  prov -->|HTTP via httpx| api[("institution API")]
+  caller["caller / finscraper-mx CLI"] -->|"get_provider(id)"| reg["institutions registry (PROVIDERS)"]
+  reg --> prov["Provider subclass: bitso, gbm, ..."]
+  prov -->|"HTTP via httpx"| api[("institution API")]
   api --> prov
-  prov -->|fetch_balances| bal["list[Balance]<br/>(account, amount, currency, …)"]
+  prov -->|"fetch_balances()"| bal["list of Balance (account, amount, currency)"]
 ```
 
 ## Layout
