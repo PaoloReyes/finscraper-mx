@@ -60,6 +60,21 @@ for pid in PROVIDERS:
 check("get_provider(" in readme, "README shows the standard get_provider() usage")
 check("from finscraper_mx.institutions" not in readme, "README avoids direct-import examples (use get_provider)")
 
+section("architecture diagram up to date (AGENTS.md)")
+agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+diagram_match = re.search(r"```mermaid(.+?)```", agents, re.S)
+diagram = diagram_match.group(1) if diagram_match else ""
+check(bool(diagram.strip()), "AGENTS.md has a mermaid architecture diagram")
+for pid in PROVIDERS:
+    name = get_provider(pid).name
+    check(name in diagram or pid in diagram, f"{pid}: shown in the architecture diagram ({name})")
+
+section("per-provider flow diagrams")
+for pid in PROVIDERS:
+    flow = ROOT / "docs" / "flows" / f"{pid}.md"
+    has_diagram = flow.exists() and "```mermaid" in flow.read_text(encoding="utf-8")
+    check(has_diagram, f"{pid}: has docs/flows/{pid}.md with a mermaid diagram")
+
 section("no secrets tracked")
 tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split()
 bad = [f for f in tracked if re.search(r"(_tokens|_config|_values)\.json$|(^|/)auth.*\.json$|\.env$|\.har$", f)]

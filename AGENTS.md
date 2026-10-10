@@ -24,27 +24,25 @@ the documented "call" — never add provider-specific public read methods or dir
 ## Architecture
 
 ```mermaid
-flowchart LR
-  caller["caller / finscraper-mx CLI"] -->|"get_provider(id)"| reg["institutions registry (PROVIDERS)"]
-  reg --> prov["Provider subclass: bitso, gbm, ..."]
-  prov -->|"HTTP via httpx"| api[("institution API")]
-  api --> prov
-  prov -->|"fetch_balances()"| bal["list of Balance (account, amount, currency)"]
+flowchart TD
+  caller["caller / finscraper-mx CLI"] -->|"get_provider(id)(**auth)"| reg["institutions registry<br/>PROVIDERS"]
+  reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
+  reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
+  bitso -->|"httpx"| bapi[("api.bitso.com")]
+  gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
+  bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
+  gbm -->|"fetch_balances()"| bal
 ```
 
-## Layout
+Providers at a glance (keep in sync with the diagram and the README table):
 
-```
-src/finscraper_mx/
-  core.py                 Provider, Balance, AccountKind, errors (AuthRequired/SessionExpired/LayoutChanged)
-  institutions/__init__.py  PROVIDERS registry {id: (module, class)} + get_provider()
-  institutions/bitso.py   Bitso provider (API key → per-coin, valued in MXN)
-  institutions/gbm.py     GBM+ provider (refresh token → per-strategy; one-time Gbm.login for the token)
-  cli.py                  `finscraper-mx list` / `finscraper-mx balances <id> --auth auth.json`
-tests/test_<id>.py        one test file per provider, mocked httpx (fake ids/tokens/amounts)
-.claude/skills/precommit-compliance/scripts/check_compliance.py   the pre-commit gate (see below)
-.claude/skills/           add-provider · precommit-compliance
-```
+| id | auth fields | reads | source |
+|----|-------------|-------|--------|
+| `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
+| `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
+
+Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
+[`docs/flows/gbm.md`](docs/flows/gbm.md) (one `docs/flows/<id>.md` per provider).
 
 ## Conventions
 

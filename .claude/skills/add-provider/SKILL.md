@@ -29,12 +29,16 @@ Read `AGENTS.md` first. Every provider is used the same way — `get_provider(id
    amounts (never real data). Cover: reads values correctly, missing auth → `AuthRequired`, and the
    institution's quirks (expired session → `SessionExpired`, pagination, currency conversion, …).
 
-5. **Add a README row** to the supported-institutions table and keep usage on the standard pattern.
+5. **Add a README row** to the supported-institutions table, and add the provider to the **`AGENTS.md`
+   architecture diagram** (and its providers table). Keep usage on the standard pattern.
 
-6. **Dependencies.** If it needs a new runtime package, add it to `dependencies` in `pyproject.toml`
+6. **Add `docs/flows/<id>.md`** — a detailed mermaid flow of the provider's auth + read calls (see the
+   existing `docs/flows/bitso.md` / `docs/flows/gbm.md`).
+
+7. **Dependencies.** If it needs a new runtime package, add it to `dependencies` in `pyproject.toml`
    (`httpx` is already there).
 
-7. **Run the gate** and fix anything red before committing:
+8. **Run the gate** and fix anything red before committing:
    ```bash
    .venv/bin/python .claude/skills/precommit-compliance/scripts/check_compliance.py
    ```
