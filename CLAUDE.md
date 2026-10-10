@@ -73,7 +73,6 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 - **`commands/`** — `/add-provider <institution>` (runs the provider-builder agent, which follows the skill).
 - **`hooks/precommit_gate.py`** — one file: the hook that blocks commit/push, and `--check` for a manual gate run.
 - **`agents/`** — `provider-builder` (subagent that adds/maintains providers end to end).
-- **`hooks/`** — `precommit_gate.py` runs the gate automatically before any `git commit`/`git push`.
 - **`settings.json`** — permissions for the dev commands + the pre-commit hook.
 
 ## Workflows
