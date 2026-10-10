@@ -4,7 +4,8 @@
 Verifies that every provider follows the standard interface, has tests, is listed in the README, that
 no secrets are tracked, and that the whole suite passes. Exits non-zero on any failure.
 
-Run from the repo root with the dev venv:  .venv/bin/python scripts/check_compliance.py
+Run from anywhere with the dev venv:
+    .venv/bin/python .claude/skills/precommit-compliance/check_compliance.py
 """
 from __future__ import annotations
 
@@ -13,7 +14,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+# Find the repo root (the dir with pyproject.toml), wherever this script lives.
+ROOT = Path(__file__).resolve()
+while not (ROOT / "pyproject.toml").exists() and ROOT != ROOT.parent:
+    ROOT = ROOT.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from finscraper_mx.core import Provider  # noqa: E402

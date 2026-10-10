@@ -36,7 +36,7 @@ Read `AGENTS.md` first. Every provider is used the same way — `get_provider(id
 
 7. **Run the gate** and fix anything red before committing:
    ```bash
-   .venv/bin/python scripts/check_compliance.py
+   .venv/bin/python .claude/skills/precommit-compliance/check_compliance.py
    ```
 
 ## Provider template
@@ -100,6 +100,6 @@ def test_reads_balances():
 
 ## Picking up an unfinished provider in a new chat
 
-1. `.venv/bin/python scripts/check_compliance.py` — the failures tell you what's missing (unregistered,
+1. `.venv/bin/python .claude/skills/precommit-compliance/check_compliance.py` — the failures tell you what's missing (unregistered,
    no test, not in README, interface drift, failing suite).
 2. Fix each reported item using the steps above until it reads `COMPLIANCE OK`.
