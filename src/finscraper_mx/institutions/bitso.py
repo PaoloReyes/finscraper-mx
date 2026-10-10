@@ -12,12 +12,9 @@ import hmac
 import time
 from decimal import Decimal
 
-from ..core import AccountKind, Balance, FinscraperError, Provider
+import httpx
 
-try:
-    import httpx
-except ImportError as error:  # pragma: no cover - depends on the installed extras
-    raise ImportError('the Bitso provider needs httpx: pip install "finscraper-mx[bitso]"') from error
+from ..core import AccountKind, Balance, FinscraperError, Provider
 
 BASE_URL = "https://api.bitso.com"
 QUOTE = "mxn"                      # value everything in Mexican pesos

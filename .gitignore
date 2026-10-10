@@ -11,6 +11,10 @@ auth*.json
 .env
 *.har
 captures/
+# Local per-user config, tokens and outputs (account ids, refresh tokens, balances)
+*_config.json
+*_tokens.json
+*_values.json
 
 # macOS
 .DS_Store
