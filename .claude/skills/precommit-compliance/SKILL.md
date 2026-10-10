@@ -12,7 +12,7 @@ This repo keeps every provider uniform: the only public way to use one is
 
 1. From the repo root, run the checker with the dev venv:
    ```bash
-   .venv/bin/python .claude/skills/precommit-compliance/check_compliance.py
+   .venv/bin/python .claude/skills/precommit-compliance/scripts/check_compliance.py
    ```
 2. If it ends with `COMPLIANCE OK`, continue with the commit/push.
 3. If it ends with `COMPLIANCE FAILED`, fix each listed issue, then re-run until it passes. Do **not**

@@ -42,7 +42,7 @@ src/finscraper_mx/
   institutions/gbm.py     GBM+ provider (refresh token → per-strategy; one-time Gbm.login for the token)
   cli.py                  `finscraper-mx list` / `finscraper-mx balances <id> --auth auth.json`
 tests/test_<id>.py        one test file per provider, mocked httpx (fake ids/tokens/amounts)
-.claude/skills/precommit-compliance/check_compliance.py   the pre-commit gate (see below)
+.claude/skills/precommit-compliance/scripts/check_compliance.py   the pre-commit gate (see below)
 .claude/skills/           add-provider · precommit-compliance
 ```
 
@@ -61,7 +61,7 @@ tests/test_<id>.py        one test file per provider, mocked httpx (fake ids/tok
 - **Add a provider** → use the `add-provider` skill (`.claude/skills/add-provider`).
 - **Before any commit/push** → run the gate and only proceed on `COMPLIANCE OK`:
   ```bash
-  .venv/bin/python .claude/skills/precommit-compliance/check_compliance.py
+  .venv/bin/python .claude/skills/precommit-compliance/scripts/check_compliance.py
   ```
   It checks provider compliance, per-provider tests, README sync, no tracked secrets, and a green suite.
 - **Dev setup:** `python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest`
