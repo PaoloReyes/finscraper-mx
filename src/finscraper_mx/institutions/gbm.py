@@ -19,11 +19,11 @@ import base64
 import hashlib
 import os
 import time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import httpx
 
-from ..core import AccountKind, AuthRequired, Balance, Provider, SessionExpired
+from ..core import AccountKind, AuthRequired, Balance, LayoutChanged, Provider, SessionExpired
 
 CLIENT_ID = "7c464570619a417080b300076e163289"  # GBM's public web client id (same for every user)
 AUTH = "https://auth.gbm.com/api/v1"
@@ -133,7 +133,13 @@ class Gbm(Provider):
             json={"request": legacy_contract_id},
         )
         r.raise_for_status()
-        return Decimal(str(r.json().get("marketValueTotal", 0))).quantize(CENT)
+        value = r.json().get("marketValueTotal")
+        if value is None:
+            raise LayoutChanged(f"gbm: no marketValueTotal for {legacy_contract_id}; GBM's response changed")
+        try:
+            return Decimal(str(value)).quantize(CENT)
+        except InvalidOperation:
+            raise LayoutChanged(f"gbm: unexpected marketValueTotal {value!r} for {legacy_contract_id}") from None
 
     @classmethod
     def login(

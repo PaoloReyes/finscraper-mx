@@ -11,7 +11,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | Id | Institution | Status | Auth |
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
-| `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.renew`) |
+| `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
 
 ## Install
 

@@ -5,7 +5,7 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from finscraper_mx import AccountKind, AuthRequired, SessionExpired, get_provider
+from finscraper_mx import AccountKind, AuthRequired, LayoutChanged, SessionExpired, get_provider
 from finscraper_mx.institutions.gbm import Gbm
 
 ACCOUNTS = {"ETFs": "BWO00001", "Fibras": "BWO00002"}
@@ -113,3 +113,16 @@ def test_login_returns_a_refresh_token():
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://auth.gbm.com")
     assert Gbm.login("me@example.com", "pw", "123456", client=client) == "new-refresh"
+
+
+@pytest.mark.parametrize("body", [{}, {"marketValueTotal": "n/a"}])
+def test_unexpected_value_response_raises_layout_changed(body):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/session/user/refresh":
+            return httpx.Response(200, json={"id": "Success", "accessToken": "fresh-access-token"})
+        return httpx.Response(200, json=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://auth.gbm.com")
+    provider = Gbm(refresh_token="rt", accounts=ACCOUNTS, client=client)
+    with pytest.raises(LayoutChanged, match="marketValueTotal"):
+        provider.fetch_balances()
