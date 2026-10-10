@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+import httpx
+
 from .core import FinscraperError
 from .institutions import PROVIDERS, get_provider
 
@@ -41,9 +43,23 @@ def main(argv: list[str] | None = None) -> int:
     except (KeyError, ImportError, OSError, json.JSONDecodeError, FinscraperError, NotImplementedError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    except httpx.HTTPError as error:
+        print(f"error: {args.institution}: {_describe(error)}", file=sys.stderr)
+        return 1
     json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
     print()
     return 0
+
+
+def _describe(error: httpx.HTTPError) -> str:
+    """One line for a failed request, instead of httpx's multi-line message and traceback."""
+    try:
+        url = error.request.url.copy_with(query=None)
+    except RuntimeError:  # no request attached
+        return f"request failed: {error}"
+    if isinstance(error, httpx.HTTPStatusError):
+        return f"HTTP {error.response.status_code} from {url}"
+    return f"request to {url} failed: {type(error).__name__}"
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 
+import httpx
 import pytest
 
 import finscraper_mx.cli as cli
@@ -47,3 +48,17 @@ def test_cli_reports_missing_auth(tmp_path, capsys):
     auth.write_text("{}")
     assert cli.main(["balances", "bitso", "--auth", str(auth)]) == 1
     assert "missing api_key" in capsys.readouterr().err
+
+
+def test_cli_reports_http_failure_in_one_line(tmp_path, monkeypatch, capsys):
+    class Failing(Fake):
+        def fetch_balances(self):
+            request = httpx.Request("GET", "https://api.example.com/v3/balance/?secret=1")
+            raise httpx.HTTPStatusError("boom", request=request, response=httpx.Response(503, request=request))
+
+    monkeypatch.setattr(cli, "get_provider", lambda id: Failing)
+    auth = tmp_path / "auth.json"
+    auth.write_text(json.dumps({"token": "x"}))
+    assert cli.main(["balances", "fake", "--auth", str(auth)]) == 1
+    err = capsys.readouterr().err
+    assert err == "error: fake: HTTP 503 from https://api.example.com/v3/balance/\n"
