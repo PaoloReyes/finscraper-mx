@@ -22,7 +22,7 @@ def main() -> int:
         return 0  # not a commit/push — allow
 
     # locate the repo root (dir containing the checker)
-    rel = Path(".claude/scripts/check_compliance.py")
+    rel = Path(".claude/hooks/check_compliance.py")
     start = Path(payload.get("cwd") or Path.cwd())
     root = next((base for base in [start, *start.parents] if (base / rel).exists()), None)
     if root is None:

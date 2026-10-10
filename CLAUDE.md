@@ -71,7 +71,7 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 - **`rules/`** — repo conventions (`providers.md`).
 - **`skills/`** — `add-provider` (scaffold a provider, with templates).
 - **`commands/`** — `/add-provider <institution>` (runs the provider-builder agent, which follows the skill).
-- **`scripts/`** — `check_compliance.py` (the gate; run by the hook and on demand).
+- **`hooks/`** — `precommit_gate.py` (blocks commit/push) and `check_compliance.py` (the gate it runs).
 - **`agents/`** — `provider-builder` (subagent that adds/maintains providers end to end).
 - **`hooks/`** — `precommit_gate.py` runs the gate automatically before any `git commit`/`git push`.
 - **`settings.json`** — permissions for the dev commands + the pre-commit hook.
@@ -81,7 +81,7 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 - **Add a provider** → the `add-provider` skill, or hand it to the `provider-builder` agent.
 - **Before commit/push** → the hook runs the gate automatically; run it by hand with:
   ```bash
-  .venv/bin/python .claude/scripts/check_compliance.py
+  .venv/bin/python .claude/hooks/check_compliance.py
   ```
   It checks provider compliance, per-provider tests, README + architecture diagram + flow docs in sync,
   no tracked secrets, and a green suite.

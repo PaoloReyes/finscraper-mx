@@ -1,6 +1,6 @@
 # Rules — finscraper-mx
 
-These are enforced by the compliance gate (`.claude/scripts/check_compliance.py`). Keep them true.
+These are enforced by the compliance gate (`.claude/hooks/check_compliance.py`). Keep them true.
 
 ## Interface
 
