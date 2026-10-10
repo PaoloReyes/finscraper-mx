@@ -70,6 +70,7 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 
 - **`rules/`** — repo conventions (`providers.md`).
 - **`skills/`** — `add-provider` (scaffold a provider, with templates).
+- **`commands/`** — `/add-provider <institution>` (runs the provider-builder agent, which follows the skill).
 - **`scripts/`** — `check_compliance.py` (the gate; run by the hook and on demand).
 - **`agents/`** — `provider-builder` (subagent that adds/maintains providers end to end).
 - **`hooks/`** — `precommit_gate.py` runs the gate automatically before any `git commit`/`git push`.
