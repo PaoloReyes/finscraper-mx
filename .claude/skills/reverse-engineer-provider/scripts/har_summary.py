@@ -8,7 +8,8 @@ auth-looking headers and cookies sent. Then, for each response, the shape of its
 redacted (types only), so the output is safe to paste into a chat or a PR.
 
 `--find` takes amounts you can see on screen (your balance, a Cajita) and lists the requests whose
-response contains them, with the JSON path to each match. That is usually how the balance endpoint is
+response contains them: the JSON path to each match, or, for server-rendered HTML and script blobs, the
+text around it with every digit masked. That is usually how the balance endpoint is
 found. Matched values are shown as `<match>`, never the number itself.
 
 Standard library only. The HAR itself is a secret (cookies, tokens): keep it gitignored (`*.har`).
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit
@@ -53,6 +55,16 @@ def find_amounts(value, targets, path="$"):
             yield path  # also catches amounts sent in cents
 
 
+def text_hits(text, targets):
+    """Contexts in raw HTML/JS where an amount appears as written on screen, digits masked."""
+    for t in targets:
+        forms = {f"{t:,.2f}", f"{t:.2f}", f"{t.normalize():f}"}
+        for form in forms:
+            for m in re.finditer(r"(?<![\d.,])" + re.escape(form) + r"(?!\d|[.,]\d)", text):
+                context = text[max(0, m.start() - 60):m.start()] + "<match>" + text[m.end():m.end() + 20]
+                yield re.sub(r"\d", "#", " ".join(context.split()))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("har")
@@ -70,7 +82,11 @@ def main() -> int:
         mime = res.get("content", {}).get("mimeType", "")
         if args.host and args.host not in url.netloc:
             continue
+        text = res.get("content", {}).get("text") or ""
         if any(t in mime for t in SKIP_TYPES):
+            if targets and text and "json" not in mime and not mime.startswith(("image/", "font/")):
+                for context in text_hits(text, targets):  # server-rendered pages and script blobs
+                    hits.append((n, f"{req['method']} {url.netloc}{url.path} ({mime})", [context]))
             continue
         headers = sorted({h["name"].lower() for h in req.get("headers", []) if any(x in h["name"].lower() for x in AUTH_HINTS)})
         cookies = sorted({c["name"] for c in req.get("cookies", [])})
@@ -80,7 +96,6 @@ def main() -> int:
             print(f"        headers: {', '.join(headers)}")
         if cookies:
             print(f"        cookies: {', '.join(cookies)}")
-        text = res.get("content", {}).get("text") or ""
         if "json" not in mime or not text:
             continue
         try:
@@ -99,7 +114,7 @@ def main() -> int:
         for n, where, paths in hits or [(None, "none found (try --find with cents, or another page)", [])]:
             print(f"#{n} {where}" if n is not None else where)
             for p in paths[:10]:
-                print(f"        <match> at {p}")
+                print(f"        <match> at {p}" if p.startswith("$") else f"        …{p}")
     return 0
 
 

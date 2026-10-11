@@ -27,11 +27,14 @@ follows the `add-provider` skill and its gate. Lessons come from GBM+ (`institut
 ## 1. Capture (the user does this, in their own browser)
 
 1. Open the institution's **web app** in Chrome or Firefox and sign in normally (MFA, captcha and all).
-2. DevTools, **Network** tab: tick *Preserve log*, filter **Fetch/XHR**.
+2. DevTools, **Network** tab: tick *Preserve log*, filter **All**. Many sites (Mercado Pago) render
+   balances into the page HTML or a script blob, which a Fetch/XHR filter hides.
 3. Reload the dashboard, then open each page that shows a balance you want (main account, savings
    pockets, investments). For the login flow, sign out and sign in again with the log running.
-4. Right-click the request list, **Save all as HAR**. Save it in the repo folder as e.g.
-   `captures/<id>.har` (gitignored).
+4. Right-click the request list, **Save all as HAR (with sensitive data)**. The plain export strips
+   cookies, and then you can't tell which ones the API needs. Save it in the repo folder as e.g.
+   `captures/<id>.har` (gitignored). Capture while **already signed in**: a login-only capture has no
+   balance calls in it.
 5. Write down 2 or 3 amounts visible on screen. These are the search keys for step 2.
 
 The web app is the first choice: mobile apps usually pin certificates and attest the device, so their
@@ -44,8 +47,10 @@ python3 -I .claude/skills/reverse-engineer-provider/scripts/har_summary.py captu
   --host <domain> --find 1534.50 --find 820.00 --shapes
 ```
 
-- `--find` lists the responses whose JSON contains the on-screen amounts, with the JSON path to each.
-  Those are the balance endpoints. It also matches amounts sent in cents.
+- `--find` lists the responses that contain the on-screen amounts: the JSON path for JSON responses
+  (also matching amounts sent in cents), or the masked surrounding text for HTML and scripts (look for
+  an embedded state blob like `__PRELOADED_STATE__`). Those are the balance sources.
+- In the browser, Cmd/Ctrl+F inside the Network panel searches every response body for an amount.
 - For each, note: method, host and path, the **auth mechanism** (header names like `authorization`,
   `x-csrf-token`, cookie names), any ids in the path and **where those ids came from** (an earlier
   response, which becomes a discovery call).
