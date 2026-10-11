@@ -1,24 +1,13 @@
 # Skandia México — call flow
 
 Provider id: `skandia`  
-Portal: [www.skandia.com.mx/SkandiaNet](https://www.skandia.com.mx/SkandiaNet)  
-Product: corporate Fondo de Ahorro (Portal-Corp)
+API: `mobile.skandia.com.mx` (SKANDIA NET MX mobile app backend)
 
 ## Auth
 
-`username` (CURP, 18 chars) + `password` (6-digit numeric PIN).
+`username` (CURP, 18 characters) + `password` (6-digit numeric PIN) — same credentials as the web portal and mobile app.
 
-The login page renders a server-side arithmetic captcha as a PNG image (dark text on a transparent
-background). The provider OCR-solves it on every call with `pytesseract` + `Pillow`: it flattens the
-image onto white, crops the expression line and reads it at three sizes. It submits an answer only
-when all three readings agree on a `a + b` / `a - b` with 1-2 digit operands; otherwise it requests a
-new captcha (up to 3), since reading one costs no login attempt but a wrong answer does. The
-`tesseract-ocr` binary must be installed. Check with `tesseract --version`:
-
-```bash
-brew install tesseract          # macOS
-apt-get install tesseract-ocr   # Debian/Ubuntu
-```
+No captcha, no OTP, no tesseract required.
 
 ## Flow
 
@@ -26,73 +15,49 @@ apt-get install tesseract-ocr   # Debian/Ubuntu
 sequenceDiagram
     participant C as Caller
     participant P as Skandia provider
-    participant S as www.skandia.com.mx/SkandiaNet
+    participant S as mobile.skandia.com.mx
 
     C->>P: fetch_balances()
-    P->>S: POST Login1.aspx  body: user=CURP&redirect=0
-    S-->>P: 200 HTML (sets ASP.NET_SessionId cookie) captcha PNG embedded as base64
-    P->>P: OCR PNG extract arithmetic e.g. "4 + 79" answer "83"
-    Note over P,S: readings disagree, so POST Login1.aspx again for a new captcha (up to 3)
-    P->>S: POST Login1.aspx/LoadUser  body: (empty)
-    S-->>P: {"d": "{UserName LentPass TypeChars PlanNum ...}"}
-    P->>S: POST Login1.aspx/ValidateLogin  body: single-quoted JSON with Password and Captcha
-    S-->>P: {"d": "{Result.IdMessage=0 ReturPage=partinfo.aspx PartId PlanNum ...}"}
-    P->>S: POST partinfo.aspx  body: form fields PlanNum PartId UserName etc
-    S-->>P: 200 HTML plan bound to session
-    P->>S: POST UpdateSession.aspx/UpdateUserSession  body: single-quoted JSON with UserName PlanNum
-    S-->>P: {"d": "{}"}
-    P->>S: POST partinfo.aspx/LoadPage  body: single-quoted partid and planid
-    S-->>P: {"d": "{features.Products.Detail ...}"}
-    P->>P: parse Detail rows into Balance objects
+    P->>S: POST /api/CoporateApp/Login/login?user=CURP&password=PIN
+    S-->>P: {Token JWT Plan PartId}
+    P->>S: POST /api/CoporateApp/Employees/Employees  Authorization: Basic JWT  corpplan: Plan
+    S-->>P: {Products [{ProductName TotalAmmount Detail}]}
+    P->>P: map Products to list[Balance(INVESTMENT)]
     P-->>C: list[Balance]
 ```
 
-## Request body format
-
-All XHR bodies use single-quoted outer objects — ASP.NET WebMethod accepts this:
-
-| Endpoint | Body |
-|---|---|
-| `Login1.aspx` | `user=CURP&redirect=0` (form-encoded) |
-| `LoadUser` | *(empty)* |
-| `ValidateLogin` | `{'request':'{"Password":"...","Captcha":"83"}'}` |
-| `partinfo.aspx` | `PlanNum=...&PartId=...&UserName=...&...` (form-encoded) |
-| `UpdateUserSession` | `{'req':'{"UserName":"...","PlanNum":"..."}'}` |
-| `LoadPage` | `{'partid':'...', 'planid':'...'}` |
-
-## Response envelope
-
-Every XHR response is `{"d": "<JSON string>"}` — the inner string must be `json.loads`'d a second time.
-
-### LoadPage — `features.Products.Detail`
+## Response structure (Employees)
 
 ```json
-[
-  ["S,T", "FONDO DE AHORRO", "$12,345.67"]
-]
+{
+  "Products": [
+    {
+      "ProductName": "FONDO DE AHORRO",
+      "ProductType": "FondoAhorro",
+      "TotalAmmount": 50000.00,
+      "Detail": [
+        {"Id": "S", "Key": "APORTACION EMPLEADO", "Value": 25000.00},
+        {"Id": "T", "Key": "APORTACION EMPRESA",  "Value": 25000.00}
+      ]
+    }
+  ]
+}
 ```
 
-Each row: `[sources_csv, product_name, "$amount"]`. One `Balance(AccountKind.INVESTMENT)` is
-emitted per row.
+One `Balance(AccountKind.INVESTMENT)` is emitted per `Products` entry using `TotalAmmount`.
+
+## Token
+
+The JWT returned by login expires in **20 minutes**. The provider re-logs in on every
+`fetch_balances()` call so the caller never has to manage session state.
 
 ## Error handling
 
 | Condition | Exception |
 |---|---|
 | Missing `username` or `password` | `AuthRequired` |
-| Wrong password or captcha (`IdMessage=20`) | `AuthRequired` |
-| Wrong captcha answer ("El valor de la operación es incorrecto"), account locked, or other `IdMessage` | `SessionExpired` |
-| HTTP 401 / 403 | `SessionExpired` |
-| `LoadPage` returns a login redirect | `SessionExpired` |
-| Unexpected JSON shape | `LayoutChanged` |
-| OCR cannot read 3 captchas in a row (nothing submitted) | `LayoutChanged` |
-
-## Notes
-
-- The ASP.NET session expires after **30 idle minutes**. `fetch_balances()` performs a fresh
-  login on every call so the caller never has to manage session state.
-- `ValidateLogin` returns `PlanNum` and `PlanName` with inconsistent semantics across accounts;
-  the provider tries both keys.
-- `PersonalData` in the LoadPage response contains PII (name, CURP, address, email). The provider
-  ignores it entirely and never logs it.
-- The HAR captures (`*.har`) are gitignored; never commit them.
+| HTTP 401 from login | `AuthRequired` |
+| HTTP 5xx from login | `SessionExpired` |
+| `Token` null / error message in response | `AuthRequired` |
+| HTTP 401/403 from Employees | `SessionExpired` |
+| `Products` missing or empty | `LayoutChanged` |

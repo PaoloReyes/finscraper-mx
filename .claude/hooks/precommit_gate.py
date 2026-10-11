@@ -11,13 +11,12 @@ Two modes, one file:
   the report. The provider-builder agent and anyone else can use this.
 
 The gate checks: provider standard interface, per-provider tests, README / CLAUDE.md diagram / flow docs in
-sync, no tracked secrets, and a green test suite. System prerequisites (tesseract installed) are checked first.
+sync, no tracked secrets, and a green test suite.
 """
 from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -48,9 +47,6 @@ def run_gate() -> int:
 
     def section(title: str) -> None:
         print(f"\n== {title}")
-
-    section("system prerequisites")
-    check(shutil.which("tesseract") is not None, "tesseract installed (on PATH)")
 
     from finscraper_mx.core import Provider
     from finscraper_mx.institutions import PROVIDERS, get_provider

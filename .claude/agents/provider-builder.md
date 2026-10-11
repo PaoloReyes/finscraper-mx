@@ -8,8 +8,7 @@ You add and maintain providers in **finscraper-mx**. Read `CLAUDE.md` and `.clau
 first. Follow the **`scaffold-provider` skill** step by step; it holds the templates and order of work.
 
 Before running tests or the gate, make sure the prerequisites in `CLAUDE.md` → **Prerequisites** are met
-(Python 3.12+, `tesseract --version` works). Install tesseract as described there if needed. If
-you can't, stop and report it rather than skipping tests.
+(Python 3.12+). If they aren't, stop and report it rather than skipping tests.
 
 Hard rules:
 - The only public usage is `get_provider(id)(**auth).fetch_balances()`. Never add provider-specific public

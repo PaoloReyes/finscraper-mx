@@ -13,15 +13,11 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
-| `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`); requires `tesseract-ocr` |
+| `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`) |
 
 ## Prerequisites
 
 - Python 3.12 or newer
-- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) (only for the `skandia` provider, which reads
-  Skandia's login captcha with it). Check it with `tesseract --version`.
-  - macOS: `brew install tesseract`
-  - Debian/Ubuntu: `apt-get install tesseract-ocr`
 
 ## Install
 
@@ -74,7 +70,7 @@ and never persists them):
 - **Stateless.** The library never stores credentials or sessions. The caller passes them in and decides where they live.
 - **Prefer sessions over passwords.** Where possible, a provider reuses a session the user created in their own
   browser instead of logging in with a password.
-- **Few dependencies.** `httpx` for every provider; Skandia also needs `Pillow`, `pytesseract` and the `tesseract-ocr` binary;
+- **Few dependencies.** `httpx` for every provider;
   Mifel's login also needs `curl-cffi` (it impersonates an iOS TLS fingerprint to pass Mifel's WAF).
 
 ## Adding an institution

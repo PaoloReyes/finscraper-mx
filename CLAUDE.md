@@ -29,11 +29,11 @@ flowchart TD
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
   reg --> mifel["Banco Mifel<br/>auth: username + password<br/>Keycloak password grant"]
-  reg --> skandia["Skandia México<br/>auth: username + password<br/>OCR captcha on every login"]
+  reg --> skandia["Skandia México<br/>auth: username + password<br/>mobile app API"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
   mifel -->|"curl-cffi (login) + httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
-  skandia -->|"httpx"| sapi[("skandia.com.mx/SkandiaNet")]
+  skandia -->|"httpx"| sapi[("mobile.skandia.com.mx")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   gbm -->|"fetch_balances()"| bal
   mifel -->|"fetch_balances()"| bal
@@ -45,7 +45,7 @@ flowchart TD
 | `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
 | `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
 | `mifel` | `username`, `password` | account balances, in MXN | Keycloak + integracion API |
-| `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SkandiaNet web (OCR captcha) |
+| `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SKANDIA NET MX mobile app API |
 
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
 [`docs/flows/gbm.md`](docs/flows/gbm.md) ·
@@ -61,7 +61,7 @@ Full list in [`.claude/rules/providers.md`](.claude/rules/providers.md). In shor
 - **No secrets in the repo** — account ids, tokens and passwords live only in local gitignored files
   (`*_config.json`, `*_tokens.json`, `*_values.json`, `auth*.json`, `.env`, `.har`). A fixed public app id
   (e.g. GBM's `CLIENT_ID`) is fine; nothing personal is hardcoded.
-- **Runtime dependencies declared in `pyproject.toml`** (`httpx`, `Pillow`, `pytesseract`, `curl-cffi`). **Money is `Decimal`**, never float.
+- **Runtime dependencies declared in `pyproject.toml`** (`httpx`, `curl-cffi`). **Money is `Decimal`**, never float.
 
 ## Layout
 
@@ -88,12 +88,8 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 ## Prerequisites
 
 - Python 3.12 or newer.
-- **Tesseract OCR** on `PATH` for the `skandia` provider and its tests (`tesseract --version`). macOS:
-  `brew install tesseract`; Debian/Ubuntu: `apt-get install tesseract-ocr`.
 
-**Agents: set these up before running tests or the gate.** Run `python3 --version` and
-`tesseract --version`. If tesseract is missing, install it before doing anything else (commands above).
-If you can't install it (no sudo, no network), stop and tell the user. Don't skip or weaken the OCR tests.
+**Agents:** check `python3 --version` before running tests or the gate.
 
 ## Workflows
 
@@ -103,5 +99,5 @@ If you can't install it (no sudo, no network), stop and tell the user. Don't ski
   .venv/bin/python .claude/hooks/precommit_gate.py --check
   ```
   It checks provider compliance, per-provider tests, README + architecture diagram + flow docs in sync,
-  no tracked secrets, tesseract installed, and a green suite.
+  no tracked secrets, and a green suite.
 - **Dev setup:** `python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest`

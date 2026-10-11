@@ -1,178 +1,48 @@
-"""Skandia México — corporate savings plan (Fondo de Ahorro), through SkandiaNet.
+"""Skandia México — corporate savings plan (Fondo de Ahorro), through the Skandia mobile app API.
 
-Read-only. Logs in automatically by OCR-solving the arithmetic captcha rendered on the login page
-(dark text on a transparent background: "Resuelve la operación / 4 + 79").
-
-Requires the ``tesseract-ocr`` system binary in addition to the Python dependencies:
-- macOS: ``brew install tesseract``
-- Debian/Ubuntu: ``apt-get install tesseract-ocr``
+Read-only. Authenticates with a simple JWT login against the same backend the
+SKANDIA NET MX iOS app uses, then reads product balances from the Employees endpoint.
 
 Auth fields
 -----------
 username
-    CURP (18 characters), e.g. ``"XEXX010101HNEXXXA4"``.
+    CURP (18 characters), e.g. ``"XEXX010101HNEXXXA4"`` (a fake placeholder).
 password
     6-digit numeric PIN.
 
-Flow
-----
-1. POST CURP to ``Login1.aspx`` → receives the page with captcha PNG embedded as base64.
-2. OCR the PNG to read the arithmetic problem and compute the answer. When the readings disagree,
-   fetch a new captcha (step 1 again, up to 3 times) instead of guessing: a wrong answer is a
-   failed login.
-3. POST ``LoadUser`` (empty body; session cookie in jar from step 1).
-4. POST ``ValidateLogin`` with password + captcha answer → returns ``PartId``, ``PlanNum``.
-5. POST ``partinfo.aspx`` form to bind the plan to the session.
-6. POST ``UpdateUserSession``.
-7. POST ``LoadPage`` → balance data (double-encoded JSON envelope).
-
-The ASP.NET session expires after 30 idle minutes; ``fetch_balances()`` performs a fresh login
-on every call so the session is always valid.
+The library re-logs in on every ``fetch_balances()`` call. The JWT expires in 20 minutes
+but since we never cache it there is no session to manage.
 
 Not affiliated with Skandia México. Covers only the corporate Fondo de Ahorro portal.
 Automated access may be against Skandia's terms of use; use only with your own account.
 """
 from __future__ import annotations
 
-import io
-import json
-import re
 from decimal import Decimal, InvalidOperation
 
 import httpx
-import pytesseract
-from PIL import Image, ImageOps
 
-from ..core import AccountKind, AuthRequired, Balance, FinscraperError, LayoutChanged, Provider, SessionExpired
+from ..core import AccountKind, AuthRequired, Balance, LayoutChanged, Provider, SessionExpired
 
-BASE_URL = "https://www.skandia.com.mx/SkandiaNet"
-ENTRY_URL = f"{BASE_URL}/OM.Mx.SecurityAccess/Login1.aspx"
+BASE_URL = "https://mobile.skandia.com.mx/api/CoporateApp"
+LOGIN_URL = f"{BASE_URL}/Login/login"
+EMPLOYEES_URL = f"{BASE_URL}/Employees/Employees"
 
-CAPTCHA_TRIES = 3  # fresh captchas to try when one can't be read; reading costs no login attempt
 CENT = Decimal("0.01")
-_AMOUNT_RE = re.compile(r"[\$,]")
-
-_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/154.0.0.0 Safari/537.36"
-)
+_UA = "MobileApp/4.0.1 (com.oldmutualmex.appiphone; build:5; iOS 27.0.0) Alamofire/4.0.1"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _parse_amount(raw: str) -> Decimal:
-    cleaned = _AMOUNT_RE.sub("", raw.strip())
+def _parse_amount(raw: float | str, label: str = "") -> Decimal:
     try:
-        return Decimal(cleaned).quantize(CENT)
+        return Decimal(str(raw)).quantize(CENT)
     except InvalidOperation:
-        raise LayoutChanged(f"skandia: cannot parse amount {raw!r}")
-
-
-def _require_tesseract() -> None:
-    """Fail fast unless the tesseract binary is installed."""
-    try:
-        pytesseract.get_tesseract_version()
-    except pytesseract.TesseractNotFoundError as exc:
-        raise FinscraperError("skandia: tesseract is required but was not found on PATH") from exc
-
-
-def _unwrap(response: httpx.Response, *, allow_empty: bool = False) -> dict:
-    """Unwrap Skandia's double-encoded ``{"d": "<JSON string>"}`` envelope."""
-    if response.status_code in (401, 403):
-        raise SessionExpired("skandia: server rejected the request (401/403)")
-    response.raise_for_status()
-    try:
-        body = response.content.decode("utf-8")
-    except UnicodeDecodeError:
-        body = response.content.decode("cp1252")  # some pages come back Latin-1 (e.g. "ó" as 0xf3)
-    try:
-        outer = json.loads(body)
-    except json.JSONDecodeError as exc:
-        raise LayoutChanged(f"skandia: response is not JSON: {body[:120]!r}") from exc
-    if "d" not in outer:
-        raise LayoutChanged(f"skandia: response missing 'd' key: {body[:120]}")
-    inner_raw = outer["d"]
-    if allow_empty and inner_raw in ("{}", ""):
-        return {}
-    if isinstance(inner_raw, str):
-        try:
-            return json.loads(inner_raw)
-        except json.JSONDecodeError as exc:
-            raise LayoutChanged(f"skandia: inner 'd' is not valid JSON: {exc}") from exc
-    return inner_raw  # already a dict (future-proofing)
-
-
-class _UnreadableCaptcha(LayoutChanged):
-    """OCR could not read the captcha with confidence. Nothing was submitted, so it costs no login attempt."""
-
-
-_LINE_HEIGHTS = (24, 26, 30)  # the expression line is OCR'd at each height; all readings must agree
-_EXPRESSION_RE = re.compile(r"^(\d{1,2})([+\-])(\d{1,2})$")  # operands are 1-2 digits
-
-
-def _text_lines(img: Image.Image) -> list[tuple[int, int]]:
-    """(top, bottom) row ranges that contain dark pixels, top to bottom."""
-    width = img.width
-    pixels = img.load()
-    lines, top = [], None
-    for y in range(img.height + 1):
-        dark = y < img.height and any(pixels[x, y] < 128 for x in range(width))
-        if dark and top is None:
-            top = y
-        elif not dark and top is not None:
-            lines.append((top, y))
-            top = None
-    return lines
-
-
-def _read_expression(line: Image.Image, height: int) -> str:
-    scale = height / line.height
-    img = line.resize((max(1, round(line.width * scale)), height), Image.LANCZOS)
-    img = ImageOps.expand(img, 10, fill=255)  # tesseract needs a margin around the text
-    text = pytesseract.image_to_string(img, config="--psm 7 -c tessedit_char_whitelist=0123456789+-")
-    return re.sub(r"\s+", "", text)
-
-
-def _ocr_captcha(png_b64: str) -> str:
-    """OCR the arithmetic captcha PNG and return the numeric answer as a string.
-
-    The image is dark text on a transparent background: "Resuelve la operación" above, e.g. "4 + 79"
-    below. It is flattened onto white, the last text line (the expression) is cropped out and read
-    at a few sizes; the answer is only returned when every reading agrees, otherwise
-    `_UnreadableCaptcha` is raised so the caller can ask for a new captcha instead of guessing
-    (a wrong answer is a failed login, and Skandia locks the account after 3).
-    """
-    import base64
-
-    raw = base64.b64decode(png_b64)
-    img = Image.open(io.BytesIO(raw)).convert("RGBA")
-    img = Image.alpha_composite(Image.new("RGBA", img.size, "white"), img).convert("L")
-    lines = _text_lines(img)
-    if not lines:
-        raise _UnreadableCaptcha("skandia: could not parse captcha: the image has no text")
-    top, bottom = lines[-1]
-    line = img.crop((0, top, img.width, bottom))
-
-    readings = {_read_expression(line, height) for height in _LINE_HEIGHTS}
-    m = _EXPRESSION_RE.match(next(iter(readings))) if len(readings) == 1 else None
-    if not m:
-        raise _UnreadableCaptcha(
-            f"skandia: could not parse captcha from OCR output {sorted(readings)!r}; "
-            "the captcha image format may have changed"
+        raise LayoutChanged(
+            f"skandia: cannot parse amount {raw!r}{' for ' + label if label else ''}"
         )
-    a, op, b = int(m.group(1)), m.group(2), int(m.group(3))
-    return str(a + b if op == "+" else a - b)
 
-
-# ---------------------------------------------------------------------------
-# Provider
-# ---------------------------------------------------------------------------
 
 class Skandia(Provider):
-    """Reads the Fondo de Ahorro balance from SkandiaNet via automated OCR login."""
+    """Reads Fondo de Ahorro balances from Skandia México via the mobile app API."""
 
     id = "skandia"
     name = "Skandia México"
@@ -180,188 +50,73 @@ class Skandia(Provider):
 
     def __init__(self, *, client: httpx.Client | None = None, **auth: str) -> None:
         super().__init__(**auth)
-        _require_tesseract()
         self._client = client or httpx.Client(
-            headers={"User-Agent": _UA},
+            headers={"User-Agent": _UA, "Accept": "*/*"},
             timeout=30,
-            follow_redirects=True,
         )
 
     def fetch_balances(self) -> list[Balance]:
-        part_id, plan_id = self._login()
-        return self._load_balances(part_id, plan_id)
+        token, plan = self._login()
+        return self._load_balances(token, plan)
 
     # ------------------------------------------------------------------
-    # Login steps (private)
+    # Auth (private)
     # ------------------------------------------------------------------
 
     def _login(self) -> tuple[str, str]:
-        """Full login flow. Returns (part_id, plan_id)."""
-        for attempt in range(CAPTCHA_TRIES):
-            html = self._post_entry_form()  # each post renders a new captcha
-            try:
-                captcha_answer = _ocr_captcha(self._extract_captcha_b64(html))
-                break
-            except _UnreadableCaptcha:
-                if attempt == CAPTCHA_TRIES - 1:
-                    raise
-        self._load_user()
-        login_data = self._validate_login(captcha_answer)
-
-        part_id = login_data.get("PartId", "")
-        plan_id = login_data.get("PlanNum", "") or login_data.get("PlanName", "")
-        if not part_id or not plan_id:
-            raise LayoutChanged(
-                f"skandia: ValidateLogin did not return PartId/PlanNum: {list(login_data)}"
-            )
-
-        self._post_partinfo_form(login_data)
-        self._update_session(login_data.get("UserName", self.auth["username"]), plan_id)
-        return part_id, plan_id
-
-    def _post_entry_form(self) -> str:
+        """POST login endpoint → (jwt_token, plan_id)."""
         resp = self._client.post(
-            ENTRY_URL,
-            content=f"user={self.auth['username']}&redirect=0".encode(),
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Origin": "https://skandiamx.com",
-                "Referer": "https://skandiamx.com/",
-            },
+            LOGIN_URL,
+            params={"user": self.auth["username"], "password": self.auth["password"]},
         )
-        if resp.status_code != 200 or "pnlCaptcha" not in resp.text:
-            raise LayoutChanged(
-                f"skandia: Login1.aspx did not return the captcha page "
-                f"(status {resp.status_code})"
-            )
-        return resp.text
-
-    def _extract_captcha_b64(self, html: str) -> str:
-        m = re.search(
-            r'id="Captcha1_imgOperation"[^>]*src="data:image/png;base64,([^"]+)"', html
-        )
-        if not m:
-            raise LayoutChanged("skandia: captcha image not found in Login1.aspx")
-        return m.group(1).strip()
-
-    def _load_user(self) -> None:
-        resp = self._client.post(
-            f"{BASE_URL}/OM.Mx.SecurityAccess/Login1.aspx/LoadUser",
-            content=b"",
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "X-Requested-With": "XMLHttpRequest",
-                "Referer": ENTRY_URL,
-            },
-        )
-        _unwrap(resp)
-
-    def _validate_login(self, captcha_answer: str) -> dict:
-        payload = json.dumps({"Password": self.auth["password"], "Captcha": captcha_answer})
-        body = f"{{'request':'{payload}'}}"
-        resp = self._client.post(
-            f"{BASE_URL}/OM.Mx.SecurityAccess/Login1.aspx/ValidateLogin",
-            content=body.encode(),
-            headers={
-                "Content-Type": "application/json; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
-                "Referer": ENTRY_URL,
-            },
-        )
-        data = _unwrap(resp)
-        result = data.get("Result", {})
-        id_msg = result.get("IdMessage", -1)
-
-        if id_msg == 20:
-            attempts = data.get("NumberOfAttemps", "?")
-            raise AuthRequired(
-                f"skandia: wrong password or captcha ({attempts} failed attempt(s)); "
-                "check credentials or the OCR captcha solver"
-            )
-        if id_msg not in (0, 1, 2):
-            msg = result.get("MessageError") or f"IdMessage={id_msg}"
-            raise SessionExpired(f"skandia: login rejected — {msg}")
-
-        return data
-
-    def _post_partinfo_form(self, login_data: dict) -> None:
-        fields = {
-            "PlanNum": login_data.get("PlanNum", ""),
-            "PartId": login_data.get("PartId", ""),
-            "UserName": login_data.get("UserName", ""),
-            "UserPass": login_data.get("UserPass", ""),
-            "firstloginnws": login_data.get("firstloginnws", "0"),
-            "UserGroupNum": login_data.get("UserGroupNum", ""),
-            "PerfilId": login_data.get("PerfilId", ""),
-            "Timeout": login_data.get("Timeout", "30"),
-        }
-        body = "&".join(f"{k}={v}" for k, v in fields.items())
-        self._client.post(
-            f"{BASE_URL}/partinfo.aspx",
-            content=body.encode(),
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Referer": ENTRY_URL,
-            },
-        )
-
-    def _update_session(self, username: str, plan_id: str) -> None:
-        payload = json.dumps({"UserName": username, "PlanNum": plan_id})
-        body = f"{{'req':'{payload}'}}"
-        resp = self._client.post(
-            f"{BASE_URL}/OM.Mx.SecurityAccess/UpdateSession.aspx/UpdateUserSession",
-            content=body.encode(),
-            headers={
-                "Content-Type": "application/json; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
-                "Referer": f"{BASE_URL}/partinfo.aspx",
-            },
-        )
-        _unwrap(resp, allow_empty=True)
+        if resp.status_code == 401:
+            raise AuthRequired("skandia: invalid username or password")
+        if resp.status_code >= 400:
+            raise SessionExpired(f"skandia: login returned {resp.status_code}")
+        body = resp.json()
+        token = body.get("Token")
+        plan = body.get("Plan")
+        if not token:
+            msg = body.get("Message") or "missing Token"
+            raise AuthRequired(f"skandia: login failed — {msg}")
+        if not plan:
+            raise LayoutChanged("skandia: login response missing Plan")
+        return token, plan
 
     # ------------------------------------------------------------------
     # Balance read (private)
     # ------------------------------------------------------------------
 
-    def _load_balances(self, part_id: str, plan_id: str) -> list[Balance]:
-        body = f"{{'partid':'{part_id}', 'planid':'{plan_id}'}}"
+    def _load_balances(self, token: str, plan: str) -> list[Balance]:
         resp = self._client.post(
-            f"{BASE_URL}/partinfo.aspx/LoadPage",
-            content=body.encode(),
+            EMPLOYEES_URL,
             headers={
-                "Content-Type": "application/json; charset=UTF-8",
-                "X-Requested-With": "XMLHttpRequest",
-                "Referer": f"{BASE_URL}/partinfo.aspx",
+                "Authorization": f"Basic {token}",
+                "corpplan": plan,
+                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
             },
         )
-        data = _unwrap(resp)
+        if resp.status_code in (401, 403):
+            raise SessionExpired("skandia: token rejected by Employees endpoint")
+        resp.raise_for_status()
+        body = resp.json()
 
-        if "ReturPage" in data or "Result" in data:
-            raise SessionExpired("skandia: LoadPage returned a login redirect; session lost")
-
-        features = data.get("features")
-        if not isinstance(features, dict):
-            raise LayoutChanged("skandia: 'features' key missing or not a dict")
-
-        products = features.get("Products")
-        if not isinstance(products, dict):
-            raise LayoutChanged("skandia: 'features.Products' missing or not a dict")
-
-        detail = products.get("Detail")
-        if not isinstance(detail, list) or not detail:
-            raise LayoutChanged("skandia: 'features.Products.Detail' is empty or missing")
+        products = body.get("Products")
+        if not isinstance(products, list):
+            raise LayoutChanged("skandia: 'Products' key missing or not a list")
+        if not products:
+            raise LayoutChanged("skandia: 'Products' is empty")
 
         balances: list[Balance] = []
-        for row in detail:
-            if not isinstance(row, list) or len(row) < 3:
-                raise LayoutChanged(f"skandia: unexpected Products.Detail row shape: {row!r}")
-            _, name, amount_str = row[:3]
+        for product in products:
+            name = str(product.get("ProductName", "")).strip() or product.get("ProductType", "")
+            raw = product.get("TotalAmmount", 0)
             balances.append(
                 Balance(
                     institution=self.id,
-                    account=str(name).strip(),
+                    account=name,
                     kind=AccountKind.INVESTMENT,
-                    amount=_parse_amount(str(amount_str)),
+                    amount=_parse_amount(raw, name),
                     currency="MXN",
                 )
             )
