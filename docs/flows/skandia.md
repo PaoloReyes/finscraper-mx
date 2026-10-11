@@ -8,8 +8,11 @@ Product: corporate Fondo de Ahorro (Portal-Corp)
 
 `username` (CURP, 18 chars) + `password` (6-digit numeric PIN).
 
-The login page renders a server-side arithmetic captcha as a PNG image. The provider OCR-solves
-it on every call with `pytesseract` + `Pillow`. The `tesseract-ocr` binary, **version 5.5 or newer**, must be installed (5.3.4, the Ubuntu 24.04
+The login page renders a server-side arithmetic captcha as a PNG image (dark text on a transparent
+background). The provider OCR-solves it on every call with `pytesseract` + `Pillow`: it flattens the
+image onto white, crops the expression line and reads it at three sizes. It submits an answer only
+when all three readings agree on a `a + b` / `a - b` with 1-2 digit operands; otherwise it requests a
+new captcha (up to 3), since reading one costs no login attempt but a wrong answer does. The `tesseract-ocr` binary, **version 5.5 or newer**, must be installed (5.3.4, the Ubuntu 24.04
 default, misreads some real captchas). Check with `tesseract --version`:
 
 ```bash
@@ -29,6 +32,7 @@ sequenceDiagram
     P->>S: POST Login1.aspx  body: user=CURP&redirect=0
     S-->>P: 200 HTML (sets ASP.NET_SessionId cookie) captcha PNG embedded as base64
     P->>P: OCR PNG extract arithmetic e.g. "4 + 79" answer "83"
+    Note over P,S: readings disagree, so POST Login1.aspx again for a new captcha (up to 3)
     P->>S: POST Login1.aspx/LoadUser  body: (empty)
     S-->>P: {"d": "{UserName LentPass TypeChars PlanNum ...}"}
     P->>S: POST Login1.aspx/ValidateLogin  body: single-quoted JSON with Password and Captcha
@@ -77,11 +81,11 @@ emitted per row.
 |---|---|
 | Missing `username` or `password` | `AuthRequired` |
 | Wrong password or captcha (`IdMessage=20`) | `AuthRequired` |
-| Account locked or other `IdMessage` | `SessionExpired` |
+| Wrong captcha answer ("El valor de la operación es incorrecto"), account locked, or other `IdMessage` | `SessionExpired` |
 | HTTP 401 / 403 | `SessionExpired` |
 | `LoadPage` returns a login redirect | `SessionExpired` |
 | Unexpected JSON shape | `LayoutChanged` |
-| OCR cannot parse the captcha image | `LayoutChanged` |
+| OCR cannot read 3 captchas in a row (nothing submitted) | `LayoutChanged` |
 
 ## Notes
 

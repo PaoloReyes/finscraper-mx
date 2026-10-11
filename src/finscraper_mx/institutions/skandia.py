@@ -1,7 +1,7 @@
 """Skandia México — corporate savings plan (Fondo de Ahorro), through SkandiaNet.
 
 Read-only. Logs in automatically by OCR-solving the arithmetic captcha rendered on the login page
-(plain dark text on white background: "Resuelve la operación / 4 + 79").
+(dark text on a transparent background: "Resuelve la operación / 4 + 79").
 
 Requires the ``tesseract-ocr`` system binary (5.5 or newer) in addition to the Python dependencies:
 - macOS: ``brew install tesseract``
@@ -17,7 +17,9 @@ password
 Flow
 ----
 1. POST CURP to ``Login1.aspx`` → receives the page with captcha PNG embedded as base64.
-2. OCR the PNG to read the arithmetic problem and compute the answer.
+2. OCR the PNG to read the arithmetic problem and compute the answer. When the readings disagree,
+   fetch a new captcha (step 1 again, up to 3 times) instead of guessing: a wrong answer is a
+   failed login.
 3. POST ``LoadUser`` (empty body; session cookie in jar from step 1).
 4. POST ``ValidateLogin`` with password + captcha answer → returns ``PartId``, ``PlanNum``.
 5. POST ``partinfo.aspx`` form to bind the plan to the session.
@@ -47,6 +49,7 @@ BASE_URL = "https://www.skandia.com.mx/SkandiaNet"
 ENTRY_URL = f"{BASE_URL}/OM.Mx.SecurityAccess/Login1.aspx"
 
 MIN_TESSERACT = (5, 5)  # older builds misread the captcha (5.3.4 does); keep in sync with the gate
+CAPTCHA_TRIES = 3  # fresh captchas to try when one can't be read; reading costs no login attempt
 CENT = Decimal("0.01")
 _AMOUNT_RE = re.compile(r"[\$,]")
 
@@ -109,31 +112,62 @@ def _unwrap(response: httpx.Response, *, allow_empty: bool = False) -> dict:
     return inner_raw  # already a dict (future-proofing)
 
 
+class _UnreadableCaptcha(LayoutChanged):
+    """OCR could not read the captcha with confidence. Nothing was submitted, so it costs no login attempt."""
+
+
+_LINE_HEIGHTS = (20, 24, 28)  # the expression line is OCR'd at each height; all readings must agree
+_EXPRESSION_RE = re.compile(r"^(\d{1,2})([+\-])(\d{1,2})$")  # operands are 1-2 digits
+
+
+def _text_lines(img: Image.Image) -> list[tuple[int, int]]:
+    """(top, bottom) row ranges that contain dark pixels, top to bottom."""
+    width = img.width
+    pixels = img.load()
+    lines, top = [], None
+    for y in range(img.height + 1):
+        dark = y < img.height and any(pixels[x, y] < 128 for x in range(width))
+        if dark and top is None:
+            top = y
+        elif not dark and top is not None:
+            lines.append((top, y))
+            top = None
+    return lines
+
+
+def _read_expression(line: Image.Image, height: int) -> str:
+    scale = height / line.height
+    img = line.resize((max(1, round(line.width * scale)), height), Image.LANCZOS)
+    img = ImageOps.expand(img, 10, fill=255)  # tesseract needs a margin around the text
+    text = pytesseract.image_to_string(img, config="--psm 7 -c tessedit_char_whitelist=0123456789+-")
+    return re.sub(r"\s+", "", text)
+
+
 def _ocr_captcha(png_b64: str) -> str:
     """OCR the arithmetic captcha PNG and return the numeric answer as a string.
 
-    The image shows plain dark text on a white background, e.g. "Resuelve la operación\\n4 + 79".
-    Extracts the two operands with a regex and computes the sum (or difference).
+    The image is dark text on a transparent background: "Resuelve la operación" above, e.g. "4 + 79"
+    below. It is flattened onto white, the last text line (the expression) is cropped out and read
+    at a few sizes; the answer is only returned when every reading agrees, otherwise
+    `_UnreadableCaptcha` is raised so the caller can ask for a new captcha instead of guessing
+    (a wrong answer is a failed login, and Skandia locks the account after 3).
     """
     import base64
 
     raw = base64.b64decode(png_b64)
-    img = Image.open(io.BytesIO(raw)).convert("L")  # greyscale
-    # Upscale 3× — tesseract reads small text more reliably at higher resolution
-    w, h = img.size
-    img = img.resize((w * 3, h * 3), Image.LANCZOS)
-    img = ImageOps.autocontrast(img)
-    img = img.point(lambda p: 0 if p < 128 else 255)  # binarize
+    img = Image.open(io.BytesIO(raw)).convert("RGBA")
+    img = Image.alpha_composite(Image.new("RGBA", img.size, "white"), img).convert("L")
+    lines = _text_lines(img)
+    if not lines:
+        raise _UnreadableCaptcha("skandia: could not parse captcha: the image has no text")
+    top, bottom = lines[-1]
+    line = img.crop((0, top, img.width, bottom))
 
-    text = pytesseract.image_to_string(
-        img,
-        config="--psm 6 -c tessedit_char_whitelist=0123456789+- ",
-    )
-
-    m = re.search(r"(\d+)\s*([+\-])\s*(\d+)", text)
+    readings = {_read_expression(line, height) for height in _LINE_HEIGHTS}
+    m = _EXPRESSION_RE.match(next(iter(readings))) if len(readings) == 1 else None
     if not m:
-        raise LayoutChanged(
-            f"skandia: could not parse captcha from OCR output {text!r}; "
+        raise _UnreadableCaptcha(
+            f"skandia: could not parse captcha from OCR output {sorted(readings)!r}; "
             "the captcha image format may have changed"
         )
     a, op, b = int(m.group(1)), m.group(2), int(m.group(3))
@@ -170,9 +204,14 @@ class Skandia(Provider):
 
     def _login(self) -> tuple[str, str]:
         """Full login flow. Returns (part_id, plan_id)."""
-        html = self._post_entry_form()
-        png_b64 = self._extract_captcha_b64(html)
-        captcha_answer = _ocr_captcha(png_b64)
+        for attempt in range(CAPTCHA_TRIES):
+            html = self._post_entry_form()  # each post renders a new captcha
+            try:
+                captcha_answer = _ocr_captcha(self._extract_captcha_b64(html))
+                break
+            except _UnreadableCaptcha:
+                if attempt == CAPTCHA_TRIES - 1:
+                    raise
         self._load_user()
         login_data = self._validate_login(captcha_answer)
 

@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 
 from finscraper_mx import AuthRequired, FinscraperError, get_provider
 from finscraper_mx.core import AccountKind, LayoutChanged, SessionExpired
-from finscraper_mx.institutions.skandia import Skandia, _ocr_captcha
+from finscraper_mx.institutions.skandia import Skandia, _ocr_captcha, _UnreadableCaptcha
 
 # ---------------------------------------------------------------------------
 # Fake data (nothing real)
@@ -315,6 +315,26 @@ def test_ocr_captcha_subtraction(monkeypatch):
     assert _ocr_captcha(b64) == "80"
 
 
+def test_ocr_reads_expression_on_transparent_background(monkeypatch):
+    """Real captchas are dark text on a fully transparent background, heading line first."""
+    monkeypatch.undo()
+    img = Image.new("RGBA", (250, 80), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.text((10, 5), "Resuelve la operacion", fill=(63, 63, 63, 255))
+    draw.text((10, 45), "27 + 6", fill=(63, 63, 63, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    assert _ocr_captcha(base64.b64encode(buf.getvalue()).decode()) == "33"
+
+
+def test_ocr_disagreeing_readings_are_not_guessed(monkeypatch):
+    monkeypatch.undo()
+    readings = iter(["73+4", "13+4", "73+4"])
+    monkeypatch.setattr("finscraper_mx.institutions.skandia._read_expression", lambda line, height: next(readings))
+    with pytest.raises(LayoutChanged, match="could not parse captcha"):
+        _ocr_captcha(_make_captcha_png("73 + 4"))
+
+
 def test_ocr_unreadable_raises_layout_changed(monkeypatch):
     monkeypatch.undo()
     img = Image.new("RGBA", (250, 80), "white")
@@ -323,3 +343,32 @@ def test_ocr_unreadable_raises_layout_changed(monkeypatch):
     b64 = base64.b64encode(buf.getvalue()).decode()
     with pytest.raises(LayoutChanged, match="could not parse captcha"):
         _ocr_captcha(b64)
+
+
+def test_unreadable_captcha_fetches_a_new_one(monkeypatch):
+    answers = iter([_UnreadableCaptcha("skandia: could not parse captcha"), FAKE_CAPTCHA_ANSWER])
+
+    def ocr(b64):
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr("finscraper_mx.institutions.skandia._ocr_captcha", ocr)
+    balances = provider().fetch_balances()
+    assert balances[0].amount == Decimal("50000.00")
+
+
+def test_three_unreadable_captchas_never_submit_a_login(monkeypatch):
+    def ocr(b64):
+        raise _UnreadableCaptcha("skandia: could not parse captcha")
+
+    monkeypatch.setattr("finscraper_mx.institutions.skandia._ocr_captcha", ocr)
+    requests = []
+    client = fake_client()
+    client.event_hooks["request"].append(requests.append)
+    with pytest.raises(LayoutChanged):
+        Skandia(username=FAKE_USERNAME, password=FAKE_PASSWORD, client=client).fetch_balances()
+    paths = [r.url.path for r in requests]
+    assert sum(p.endswith("Login1.aspx") for p in paths) == 3
+    assert not any(p.endswith("ValidateLogin") for p in paths)
