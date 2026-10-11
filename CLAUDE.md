@@ -28,12 +28,15 @@ flowchart TD
   caller["caller / finscraper-mx CLI"] -->|"get_provider(id)(**auth)"| reg["institutions registry<br/>PROVIDERS"]
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
+  reg --> mifel["Banco Mifel<br/>auth: username + password<br/>Keycloak password grant"]
   reg --> skandia["Skandia México<br/>auth: username + password<br/>OCR captcha on every login"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
+  mifel -->|"httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
   skandia -->|"httpx"| sapi[("skandia.com.mx/SkandiaNet")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   gbm -->|"fetch_balances()"| bal
+  mifel -->|"fetch_balances()"| bal
   skandia -->|"fetch_balances()"| bal
 ```
 
@@ -41,10 +44,12 @@ flowchart TD
 |----|-------------|-------|--------|
 | `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
 | `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
+| `mifel` | `username`, `password` | account balances, in MXN | Keycloak + integracion API |
 | `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SkandiaNet web (OCR captcha) |
 
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
 [`docs/flows/gbm.md`](docs/flows/gbm.md) ·
+[`docs/flows/mifel.md`](docs/flows/mifel.md) ·
 [`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).
 
 ## Rules
@@ -56,7 +61,7 @@ Full list in [`.claude/rules/providers.md`](.claude/rules/providers.md). In shor
 - **No secrets in the repo** — account ids, tokens and passwords live only in local gitignored files
   (`*_config.json`, `*_tokens.json`, `*_values.json`, `auth*.json`, `.env`, `.har`). A fixed public app id
   (e.g. GBM's `CLIENT_ID`) is fine; nothing personal is hardcoded.
-- **Runtime dependencies declared in `pyproject.toml`** (`httpx`, `Pillow`, `pytesseract`). **Money is `Decimal`**, never float.
+- **Runtime dependencies declared in `pyproject.toml`** (`httpx`, `Pillow`, `pytesseract`, `curl-cffi`). **Money is `Decimal`**, never float.
 
 ## Layout
 

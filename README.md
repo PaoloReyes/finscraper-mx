@@ -12,6 +12,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
+| `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
 | `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`); requires `tesseract-ocr` |
 
 ## Prerequisites

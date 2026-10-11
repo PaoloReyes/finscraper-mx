@@ -12,6 +12,7 @@ from ..core import Provider
 PROVIDERS: dict[str, tuple[str, str]] = {
     "bitso": ("finscraper_mx.institutions.bitso", "Bitso"),
     "gbm": ("finscraper_mx.institutions.gbm", "Gbm"),
+    "mifel": ("finscraper_mx.institutions.mifel", "Mifel"),
     "skandia": ("finscraper_mx.institutions.skandia", "Skandia"),
 }
 
