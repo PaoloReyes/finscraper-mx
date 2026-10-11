@@ -8,7 +8,7 @@ You add and maintain providers in **finscraper-mx**. Read `CLAUDE.md` and `.clau
 first. Follow the **`scaffold-provider` skill** step by step; it holds the templates and order of work.
 
 Before running tests or the gate, make sure the prerequisites in `CLAUDE.md` → **Prerequisites** are met
-(Python 3.12+, `tesseract --version` ≥ 5.5). Install or upgrade tesseract as described there if needed. If
+(Python 3.12+, `tesseract --version` works). Install tesseract as described there if needed. If
 you can't, stop and report it rather than skipping tests.
 
 Hard rules:

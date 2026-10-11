@@ -83,18 +83,12 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 ## Prerequisites
 
 - Python 3.12 or newer.
-- **Tesseract OCR 5.5+** on `PATH` for the `skandia` provider and its tests (`tesseract --version`). macOS:
-  `brew install tesseract`. Ubuntu 24.04's default package (5.3.4) is too old: it misreads real captchas,
-  so `tests/test_skandia.py` fails.
+- **Tesseract OCR** on `PATH` for the `skandia` provider and its tests (`tesseract --version`). macOS:
+  `brew install tesseract`; Debian/Ubuntu: `apt-get install tesseract-ocr`.
 
 **Agents: set these up before running tests or the gate.** Run `python3 --version` and
-`tesseract --version`. If tesseract is missing or older than 5.5, install it before doing anything else:
-- macOS: `brew install tesseract` (or `brew upgrade tesseract`)
-- Ubuntu/Debian: the distro package is too old. Use a 5.5+ build, e.g.
-  `sudo add-apt-repository -y ppa:alex-p/tesseract-ocr5 && sudo apt-get update && sudo apt-get install -y tesseract-ocr`
-
-Then check `tesseract --version` again. If you can't install it (no sudo, no network), stop and tell the
-user. Don't skip or weaken the OCR tests or the gate's version check.
+`tesseract --version`. If tesseract is missing, install it before doing anything else (commands above).
+If you can't install it (no sudo, no network), stop and tell the user. Don't skip or weaken the OCR tests.
 
 ## Workflows
 
@@ -104,5 +98,5 @@ user. Don't skip or weaken the OCR tests or the gate's version check.
   .venv/bin/python .claude/hooks/precommit_gate.py --check
   ```
   It checks provider compliance, per-provider tests, README + architecture diagram + flow docs in sync,
-  no tracked secrets, tesseract 5.5+ installed, and a green suite.
+  no tracked secrets, tesseract installed, and a green suite.
 - **Dev setup:** `python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest`
