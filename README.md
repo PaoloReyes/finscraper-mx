@@ -12,6 +12,16 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
+| `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`); requires `tesseract-ocr` ≥ 5.5 |
+
+## Prerequisites
+
+- Python 3.12 or newer
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) **5.5 or newer** (only for the `skandia` provider,
+  which reads Skandia's login captcha with it). Check it with `tesseract --version`.
+  - macOS: `brew install tesseract`
+  - Linux: the distro package may be older (Ubuntu 24.04 ships 5.3.4, which misreads some captchas), so
+    install a 5.5+ build.
 
 ## Install
 
@@ -64,7 +74,7 @@ and never persists them):
 - **Stateless.** The library never stores credentials or sessions. The caller passes them in and decides where they live.
 - **Prefer sessions over passwords.** Where possible, a provider reuses a session the user created in their own
   browser instead of logging in with a password.
-- **One dependency.** `httpx` is the only runtime requirement.
+- **Few dependencies.** `httpx` for every provider; Skandia also needs `Pillow`, `pytesseract` and the `tesseract-ocr` binary, version 5.5 or newer (older builds misread some captchas).
 
 ## Adding an institution
 

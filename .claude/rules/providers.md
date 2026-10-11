@@ -24,8 +24,10 @@ These are enforced by the compliance gate (`.claude/hooks/precommit_gate.py --ch
 
 ## Dependencies
 
-- One runtime dependency, `httpx`, declared in `pyproject.toml` (`dependencies`). No per-provider extras,
-  no import guards — import `httpx` directly.
+- Runtime dependencies are declared in `pyproject.toml` (`dependencies`): `httpx` for every provider, plus
+  `Pillow` and `pytesseract` for Skandia's captcha OCR (which also needs the `tesseract-ocr` system binary,
+  noted in the README row and `docs/flows/skandia.md`). Add a new one only when a provider can't work
+  without it. No per-provider extras, no import guards: import dependencies directly.
 
 ## Keep these in sync (the gate checks all of them)
 

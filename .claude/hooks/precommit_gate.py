@@ -11,18 +11,20 @@ Two modes, one file:
   the report. The provider-builder agent and anyone else can use this.
 
 The gate checks: provider standard interface, per-provider tests, README / CLAUDE.md diagram / flow docs in
-sync, no tracked secrets, and a green test suite.
+sync, no tracked secrets, and a green test suite. System prerequisites (tesseract 5.5+) are checked first.
 """
 from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
 REL = Path(".claude/hooks/precommit_gate.py")
+MIN_TESSERACT = (5, 5)  # older builds misread Skandia's captcha (5.3.4 does)
 
 
 def repo_root(start: Path) -> Path | None:
@@ -38,9 +40,6 @@ def run_gate() -> int:
     root = HERE.parents[2]
     sys.path.insert(0, str(root / "src"))
 
-    from finscraper_mx.core import Provider
-    from finscraper_mx.institutions import PROVIDERS, get_provider
-
     failures: list[str] = []
 
     def check(ok: bool, msg: str) -> None:
@@ -50,6 +49,19 @@ def run_gate() -> int:
 
     def section(title: str) -> None:
         print(f"\n== {title}")
+
+    section("system prerequisites")
+    want = ".".join(map(str, MIN_TESSERACT))
+    if shutil.which("tesseract") is None:
+        check(False, f"tesseract {want}+ installed (not found on PATH)")
+    else:
+        out = subprocess.run(["tesseract", "--version"], capture_output=True, text=True)
+        found = re.search(r"tesseract\s+v?(\d+)\.(\d+)", out.stdout + out.stderr)
+        version = (int(found.group(1)), int(found.group(2))) if found else (0, 0)
+        check(version >= MIN_TESSERACT, f"tesseract {want}+ installed (found {'.'.join(map(str, version)) if found else 'unknown'})")
+
+    from finscraper_mx.core import Provider
+    from finscraper_mx.institutions import PROVIDERS, get_provider
 
     section("provider compliance (standard interface only)")
     for pid in PROVIDERS:
@@ -96,7 +108,7 @@ def run_gate() -> int:
     check(not bad, "no credential/session files tracked" + (f" (found: {', '.join(bad)})" if bad else ""))
 
     section("tests pass")
-    result = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=root)
+    result = subprocess.run([sys.executable, "-m", "pytest"], cwd=root)
     check(result.returncode == 0, "pytest passes")
 
     print()

@@ -28,19 +28,24 @@ flowchart TD
   caller["caller / finscraper-mx CLI"] -->|"get_provider(id)(**auth)"| reg["institutions registry<br/>PROVIDERS"]
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
+  reg --> skandia["Skandia México<br/>auth: username + password<br/>OCR captcha on every login"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
+  skandia -->|"httpx"| sapi[("skandia.com.mx/SkandiaNet")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   gbm -->|"fetch_balances()"| bal
+  skandia -->|"fetch_balances()"| bal
 ```
 
 | id | auth fields | reads | source |
 |----|-------------|-------|--------|
 | `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
 | `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
+| `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SkandiaNet web (OCR captcha) |
 
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
-[`docs/flows/gbm.md`](docs/flows/gbm.md) (one `docs/flows/<id>.md` per provider).
+[`docs/flows/gbm.md`](docs/flows/gbm.md) ·
+[`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).
 
 ## Rules
 
@@ -51,7 +56,7 @@ Full list in [`.claude/rules/providers.md`](.claude/rules/providers.md). In shor
 - **No secrets in the repo** — account ids, tokens and passwords live only in local gitignored files
   (`*_config.json`, `*_tokens.json`, `*_values.json`, `auth*.json`, `.env`, `.har`). A fixed public app id
   (e.g. GBM's `CLIENT_ID`) is fine; nothing personal is hardcoded.
-- **One runtime dependency:** `httpx`. **Money is `Decimal`**, never float.
+- **Runtime dependencies declared in `pyproject.toml`** (`httpx`, `Pillow`, `pytesseract`). **Money is `Decimal`**, never float.
 
 ## Layout
 
@@ -75,6 +80,22 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 - **`agents/`** — `provider-builder` (subagent that adds/maintains providers end to end).
 - **`settings.json`** — permissions for the dev commands + the pre-commit hook.
 
+## Prerequisites
+
+- Python 3.12 or newer.
+- **Tesseract OCR 5.5+** on `PATH` for the `skandia` provider and its tests (`tesseract --version`). macOS:
+  `brew install tesseract`. Ubuntu 24.04's default package (5.3.4) is too old: it misreads real captchas,
+  so `tests/test_skandia.py` fails.
+
+**Agents: set these up before running tests or the gate.** Run `python3 --version` and
+`tesseract --version`. If tesseract is missing or older than 5.5, install it before doing anything else:
+- macOS: `brew install tesseract` (or `brew upgrade tesseract`)
+- Ubuntu/Debian: the distro package is too old. Use a 5.5+ build, e.g.
+  `sudo add-apt-repository -y ppa:alex-p/tesseract-ocr5 && sudo apt-get update && sudo apt-get install -y tesseract-ocr`
+
+Then check `tesseract --version` again. If you can't install it (no sudo, no network), stop and tell the
+user. Don't skip or weaken the OCR tests or the gate's version check.
+
 ## Workflows
 
 - **Add a provider** → `/add-provider <institution>`, the `scaffold-provider` skill, or hand it to the `provider-builder` agent.
@@ -83,5 +104,5 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
   .venv/bin/python .claude/hooks/precommit_gate.py --check
   ```
   It checks provider compliance, per-provider tests, README + architecture diagram + flow docs in sync,
-  no tracked secrets, and a green suite.
+  no tracked secrets, tesseract 5.5+ installed, and a green suite.
 - **Dev setup:** `python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest`
