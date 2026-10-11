@@ -74,7 +74,8 @@ and never persists them):
 - **Stateless.** The library never stores credentials or sessions. The caller passes them in and decides where they live.
 - **Prefer sessions over passwords.** Where possible, a provider reuses a session the user created in their own
   browser instead of logging in with a password.
-- **Few dependencies.** `httpx` for every provider; Skandia also needs `Pillow`, `pytesseract` and the `tesseract-ocr` binary.
+- **Few dependencies.** `httpx` for every provider; Skandia also needs `Pillow`, `pytesseract` and the `tesseract-ocr` binary;
+  Mifel's login also needs `curl-cffi` (it impersonates an iOS TLS fingerprint to pass Mifel's WAF).
 
 ## Adding an institution
 

@@ -32,7 +32,7 @@ flowchart TD
   reg --> skandia["Skandia México<br/>auth: username + password<br/>OCR captcha on every login"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
-  mifel -->|"httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
+  mifel -->|"curl-cffi (login) + httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
   skandia -->|"httpx"| sapi[("skandia.com.mx/SkandiaNet")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   gbm -->|"fetch_balances()"| bal
