@@ -1,5 +1,5 @@
 ---
-name: provider-playbook
+name: scaffold-provider
 description: Add a new institution provider to finscraper-mx. Use when adding support for a new Mexican bank, broker, sofipo, wallet or exchange — scaffolds the provider following the standard interface, registers it, adds its test and README row, and keeps the repo compliant. Also use to pick up a half-finished provider in a new chat.
 ---
 
