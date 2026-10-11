@@ -74,7 +74,8 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 ## .claude/ structure
 
 - **`rules/`** — repo conventions (`providers.md`).
-- **`skills/`** — `add-provider` (scaffold a provider, with templates).
+- **`skills/`** — `add-provider` (scaffold a provider, with templates) · `reverse-engineer-provider`
+  (map an institution's private web API from a browser capture when there is no official one).
 - **`commands/`** — `/add-provider <institution>` (runs the provider-builder agent, which follows the skill).
 - **`hooks/precommit_gate.py`** — one file: the hook that blocks commit/push, and `--check` for a manual gate run.
 - **`agents/`** — `provider-builder` (subagent that adds/maintains providers end to end).
@@ -83,6 +84,8 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
 ## Workflows
 
 - **Add a provider** → the `add-provider` skill, or hand it to the `provider-builder` agent.
+- **No official API?** → the `reverse-engineer-provider` skill first (capture, find endpoints, pick the
+  credential), then `add-provider`.
 - **Before commit/push** → the hook runs the gate automatically; run it by hand with:
   ```bash
   .venv/bin/python .claude/hooks/precommit_gate.py --check

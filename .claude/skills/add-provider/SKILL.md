@@ -13,6 +13,8 @@ Read `CLAUDE.md` first. Every provider is used the same way — `get_provider(id
 1. **Pick the id and auth.** Choose a short snake_case `id` (e.g. `banorte`, `mercado_pago`). Decide its
    `auth_fields` — the credentials the caller supplies (an API key, a refresh token, a session cookie, …).
    Credentials are created once by the user and stored by them; the library stays stateless.
+   If the institution has no official API for balances, map its private one first with the
+   `reverse-engineer-provider` skill.
 
 2. **Create `src/finscraper_mx/institutions/<id>.py`** — a `Provider` subclass (template below). Only
    `fetch_balances()` is the public read path. Value everything in MXN; amounts are `Decimal`.
