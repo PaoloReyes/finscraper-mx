@@ -3,7 +3,7 @@
 Read-only. Logs in automatically by OCR-solving the arithmetic captcha rendered on the login page
 (dark text on a transparent background: "Resuelve la operación / 4 + 79").
 
-Requires the ``tesseract-ocr`` system binary (5.5 or newer) in addition to the Python dependencies:
+Requires the ``tesseract-ocr`` system binary in addition to the Python dependencies:
 - macOS: ``brew install tesseract``
 - Debian/Ubuntu: ``apt-get install tesseract-ocr``
 
@@ -48,7 +48,6 @@ from ..core import AccountKind, AuthRequired, Balance, FinscraperError, LayoutCh
 BASE_URL = "https://www.skandia.com.mx/SkandiaNet"
 ENTRY_URL = f"{BASE_URL}/OM.Mx.SecurityAccess/Login1.aspx"
 
-MIN_TESSERACT = (5, 5)  # older builds misread the captcha (5.3.4 does); keep in sync with the gate
 CAPTCHA_TRIES = 3  # fresh captchas to try when one can't be read; reading costs no login attempt
 CENT = Decimal("0.01")
 _AMOUNT_RE = re.compile(r"[\$,]")
@@ -73,17 +72,11 @@ def _parse_amount(raw: str) -> Decimal:
 
 
 def _require_tesseract() -> None:
-    """Fail fast unless the tesseract binary is installed and new enough to read the captcha.
-
-    A misread captcha counts as a failed login, and Skandia locks the account after 3.
-    """
-    want = ".".join(map(str, MIN_TESSERACT))
+    """Fail fast unless the tesseract binary is installed."""
     try:
-        version = pytesseract.get_tesseract_version()
+        pytesseract.get_tesseract_version()
     except pytesseract.TesseractNotFoundError as exc:
-        raise FinscraperError(f"skandia: tesseract {want}+ is required but was not found on PATH") from exc
-    if tuple(version.release[:2]) < MIN_TESSERACT:
-        raise FinscraperError(f"skandia: tesseract {want}+ is required, found {version}")
+        raise FinscraperError("skandia: tesseract is required but was not found on PATH") from exc
 
 
 def _unwrap(response: httpx.Response, *, allow_empty: bool = False) -> dict:
@@ -116,7 +109,7 @@ class _UnreadableCaptcha(LayoutChanged):
     """OCR could not read the captcha with confidence. Nothing was submitted, so it costs no login attempt."""
 
 
-_LINE_HEIGHTS = (20, 24, 28)  # the expression line is OCR'd at each height; all readings must agree
+_LINE_HEIGHTS = (24, 26, 30)  # the expression line is OCR'd at each height; all readings must agree
 _EXPRESSION_RE = re.compile(r"^(\d{1,2})([+\-])(\d{1,2})$")  # operands are 1-2 digits
 
 

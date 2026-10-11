@@ -9,7 +9,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from packaging.version import Version
 from PIL import Image, ImageDraw
 
 from finscraper_mx import AuthRequired, FinscraperError, get_provider
@@ -146,13 +145,6 @@ def mock_ocr(monkeypatch):
         "finscraper_mx.institutions.skandia._ocr_captcha",
         lambda b64: FAKE_CAPTCHA_ANSWER,
     )
-
-
-@pytest.mark.parametrize("found", ["5.3.4", "4.1.1"])
-def test_old_tesseract_is_rejected(monkeypatch, found):
-    monkeypatch.setattr("pytesseract.get_tesseract_version", lambda: Version(found))
-    with pytest.raises(FinscraperError, match=f"5.5\\+ is required, found {found}"):
-        provider()
 
 
 def test_missing_tesseract_is_rejected(monkeypatch):
@@ -316,15 +308,12 @@ def test_ocr_captcha_subtraction(monkeypatch):
 
 
 def test_ocr_reads_expression_on_transparent_background(monkeypatch):
-    """Real captchas are dark text on a fully transparent background, heading line first."""
+    """Real captchas are dark text on a fully transparent background; "73 + 4" was misread before."""
     monkeypatch.undo()
-    img = Image.new("RGBA", (250, 80), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    draw.text((10, 5), "Resuelve la operacion", fill=(63, 63, 63, 255))
-    draw.text((10, 45), "27 + 6", fill=(63, 63, 63, 255))
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    assert _ocr_captcha(base64.b64encode(buf.getvalue()).decode()) == "33"
+    b64 = (FIXTURES_DIR / "skandia_captcha_5.b64").read_text().strip()
+    img = Image.open(io.BytesIO(base64.b64decode(b64)))
+    assert img.mode == "RGBA" and img.getpixel((0, 0))[3] == 0
+    assert _ocr_captcha(b64) == "77"
 
 
 def test_ocr_disagreeing_readings_are_not_guessed(monkeypatch):

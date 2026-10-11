@@ -12,12 +12,12 @@ The login page renders a server-side arithmetic captcha as a PNG image (dark tex
 background). The provider OCR-solves it on every call with `pytesseract` + `Pillow`: it flattens the
 image onto white, crops the expression line and reads it at three sizes. It submits an answer only
 when all three readings agree on a `a + b` / `a - b` with 1-2 digit operands; otherwise it requests a
-new captcha (up to 3), since reading one costs no login attempt but a wrong answer does. The `tesseract-ocr` binary, **version 5.5 or newer**, must be installed (5.3.4, the Ubuntu 24.04
-default, misreads some real captchas). Check with `tesseract --version`:
+new captcha (up to 3), since reading one costs no login attempt but a wrong answer does. The
+`tesseract-ocr` binary must be installed. Check with `tesseract --version`:
 
 ```bash
 brew install tesseract          # macOS
-apt-get install tesseract-ocr   # Debian/Ubuntu: check the version, the distro package may be older
+apt-get install tesseract-ocr   # Debian/Ubuntu
 ```
 
 ## Flow
