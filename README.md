@@ -12,7 +12,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
-| `mercado_pago` | Mercado Pago | ✅ account money in MXN | access token (`access_token`) from Mercado Pago Developers |
+| `mercado_pago` | Mercado Pago | ✅ Saldo, Apartados, Cripto in MXN | browser session cookie (`cookies`) |
 
 ## Install
 
@@ -58,10 +58,12 @@ and never persists them):
   again). GBM optionally takes `contract_id` / `accounts` to pin strategies, and `location=(lat, lon)`.
   It is unofficial and reverse-engineered; automated access may be against GBM's terms, and the refresh
   token is trade-capable — keep it off shared hosts.
-- **Mercado Pago** — an `access_token` (`APP_USR-…`): create an application in
-  [Mercado Pago Developers](https://www.mercadopago.com.mx/developers/panel/app) and copy its production
-  access token. It reads the account money (dinero en cuenta); Cajitas are not included. The token can
-  also create charges, so keep it private.
+- **Mercado Pago** — `cookies`: the `Cookie` header of your own signed-in browser. Sign in at
+  mercadopago.com.mx, open DevTools → Network, reload, click the `home` request and copy the value of
+  its `cookie` request header into `auth.json` as `{"cookies": "…"}`. It works until that browser session
+  ends (signing out ends it); then copy it again. Mercado Pago's developer API only covers payments, so
+  this provider is reverse-engineered from the web app and unofficial; the cookie gives full access to
+  your account, so keep it private.
 
 ## Design
 

@@ -28,10 +28,10 @@ flowchart TD
   caller["caller / finscraper-mx CLI"] -->|"get_provider(id)(**auth)"| reg["institutions registry<br/>PROVIDERS"]
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
-  reg --> mp["Mercado Pago<br/>auth: access_token"]
+  reg --> mp["Mercado Pago<br/>auth: cookies<br/>from the signed-in browser"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
-  mp -->|"httpx"| mapi[("api.mercadopago.com")]
+  mp -->|"httpx"| mapi[("www.mercadopago.com.mx/home")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   gbm -->|"fetch_balances()"| bal
   mp -->|"fetch_balances()"| bal
@@ -41,7 +41,7 @@ flowchart TD
 |----|-------------|-------|--------|
 | `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
 | `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
-| `mercado_pago` | `access_token` | account money, in MXN | official API |
+| `mercado_pago` | `cookies` (browser session) | per balance tab, in MXN | web home page state |
 
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
 [`docs/flows/gbm.md`](docs/flows/gbm.md) ·

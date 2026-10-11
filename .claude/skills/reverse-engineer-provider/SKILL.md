@@ -95,6 +95,18 @@ argument.
   caller passes the credential in and stores it. A `login` classmethod that *returns* a credential is
   fine; public read methods other than `fetch_balances()` are not.
 
+## What Mercado Pago taught us
+
+- The developer API was payments-only, and the login sat behind reCAPTCHA Enterprise plus a
+  `browser-assessment` check. So the credential is the browser's `Cookie` header (one `cookies`
+  field), and the provider never logs in.
+- No balance JSON call at all: the home page is server-rendered, and the numbers live in a script blob
+  (`__NORDIC_RENDERING_CTX__`, `_n.ctx.r={...}`). Pull it out with a regex plus
+  `json.JSONDecoder().raw_decode` (JavaScript follows the JSON), then walk to the widget by its `type`
+  rather than by index.
+- Request with `follow_redirects=False`: an expired session shows up as a 302 to the login.
+- Amounts were split as `{"fraction": "12345", "cents": "67"}`. Strip separators before `Decimal`.
+
 ## 5. Build it
 
 Hand over to the `add-provider` skill (module, registry, tests, README row, CLAUDE.md diagram,
