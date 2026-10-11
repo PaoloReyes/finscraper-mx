@@ -5,7 +5,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
 You add and maintain providers in **finscraper-mx**. Read `CLAUDE.md` and `.claude/rules/providers.md`
-first. Follow the **`add-provider` skill** step by step; it holds the templates and order of work.
+first. Follow the **`provider-playbook` skill** step by step; it holds the templates and order of work.
 
 Hard rules:
 - The only public usage is `get_provider(id)(**auth).fetch_balances()`. Never add provider-specific public
