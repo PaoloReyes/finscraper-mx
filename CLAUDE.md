@@ -29,14 +29,17 @@ flowchart TD
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
   reg --> mifel["Banco Mifel<br/>auth: username + password<br/>Keycloak password grant"]
+  reg --> plata["Plata<br/>auth: auth_request + installation_id<br/>capture Auth call from proxy; replayed to mint a session token"]
   reg --> skandia["Skandia México<br/>auth: username + password<br/>mobile app API"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
   mifel -->|"curl-cffi (login) + httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
+  plata -->|"httpx (HTTP/2 gRPC)"| papi[("prime.platacard.mx")]
   skandia -->|"httpx"| sapi[("mobile.skandia.com.mx")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   gbm -->|"fetch_balances()"| bal
   mifel -->|"fetch_balances()"| bal
+  plata -->|"fetch_balances()"| bal
   skandia -->|"fetch_balances()"| bal
 ```
 
@@ -45,11 +48,13 @@ flowchart TD
 | `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
 | `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
 | `mifel` | `username`, `password` | account balances, in MXN | Keycloak + integracion API |
+| `plata` | `auth_request`, `installation_id` (capture the Auth call from proxy; replayed to mint a session token) | accounts + investment, in MXN (Acciones via Google FX) | mobile app gRPC API |
 | `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SKANDIA NET MX mobile app API |
 
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
 [`docs/flows/gbm.md`](docs/flows/gbm.md) ·
 [`docs/flows/mifel.md`](docs/flows/mifel.md) ·
+[`docs/flows/plata.md`](docs/flows/plata.md) ·
 [`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).
 
 ## Rules

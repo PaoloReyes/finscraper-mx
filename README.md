@@ -13,6 +13,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
+| `plata` | Plata | ✅ accounts + investment in MXN (incl. Plata Acciones) | `auth_request` + `installation_id` (capture the app's Auth call from a proxy; replayed to mint a session token) |
 | `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`) |
 
 ## Prerequisites
@@ -63,6 +64,12 @@ and never persists them):
   again). GBM optionally takes `contract_id` / `accounts` to pin strategies, and `location=(lat, lon)`.
   It is unofficial and reverse-engineered; automated access may be against GBM's terms, and the refresh
   token is trade-capable — keep it off shared hosts.
+- **Plata** — `auth_request` + `installation_id`, captured from a single mitmproxy session. Plata's login
+  blob is signed on-device and can't be rebuilt, so the provider replays the captured Auth request to mint
+  a fresh session token each run. From the capture: base64-encode the request body of the
+  `AuthFlowService/Auth` POST (→ `auth_request`) and copy the `x-plata-installation-id` header
+  (→ `installation_id`). It's long-lived (observed still valid ~10 h after capture) and is invalidated when
+  Plata rotates the device key; recapture it and regenerate the file when a read raises `SessionExpired`.
 
 ## Design
 
@@ -70,7 +77,7 @@ and never persists them):
 - **Stateless.** The library never stores credentials or sessions. The caller passes them in and decides where they live.
 - **Prefer sessions over passwords.** Where possible, a provider reuses a session the user created in their own
   browser instead of logging in with a password.
-- **Few dependencies.** `httpx` for every provider;
+- **Few dependencies.** `httpx` for every provider (with the `http2` extra, which Plata's gRPC API needs);
   Mifel's login also needs `curl-cffi` (it impersonates an iOS TLS fingerprint to pass Mifel's WAF).
 
 ## Adding an institution

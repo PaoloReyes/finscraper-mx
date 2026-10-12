@@ -24,7 +24,8 @@ These are enforced by the compliance gate (`.claude/hooks/precommit_gate.py --ch
 
 ## Dependencies
 
-- Runtime dependencies are declared in `pyproject.toml` (`dependencies`): `httpx` for every provider, plus
+- Runtime dependencies are declared in `pyproject.toml` (`dependencies`): `httpx` for every provider (with
+  the `http2` extra, which Plata's gRPC API needs; see `docs/flows/plata.md`), plus
   `curl-cffi` for Mifel's login (it impersonates
   an iOS TLS fingerprint to pass Mifel's WAF; see `docs/flows/mifel.md`). Add a new one only when a provider
   can't work without it. No per-provider extras, no import guards: import dependencies directly.
