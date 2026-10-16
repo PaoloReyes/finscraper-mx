@@ -12,6 +12,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
+| `mercado_pago` | Mercado Pago | ✅ Saldo, Apartados, Cripto in MXN | mobile-app session (`token`, `session_id`, `device_id`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
 | `plata` | Plata | ✅ accounts + investment in MXN (incl. Plata Acciones) | `auth_request` + `installation_id` (capture the app's Auth call from a proxy; replayed to mint a session token) |
 | `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`) |
@@ -64,6 +65,15 @@ and never persists them):
   again). GBM optionally takes `contract_id` / `accounts` to pin strategies, and `location=(lat, lon)`.
   It is unofficial and reverse-engineered; automated access may be against GBM's terms, and the refresh
   token is trade-capable — keep it off shared hosts.
+- **Mercado Pago** — captured from your own signed-in mobile app (its developer API only covers
+  payments, so this is reverse-engineered and unofficial). Sign in on the app with a capture running
+  (e.g. mitmproxy), find the `GET mobile.mercadopago.com/mp-home-hub/home` request, and copy its
+  `authorization` (the `APP_USR-…` after `Bearer `), `x-meli-session-id` and `x-device-id` into
+  `auth.json` as `{"token": "…", "session_id": "…", "device_id": "…"}`. If a read is rejected, add
+  `x-client-info`, `x-d2id`, `x-device-fsid` and `x-frontend-session-id` as optional `client_info`,
+  `d2id`, `device_fsid` and `frontend_session_id`. App login needs device attestation and a
+  face-validation challenge, so it can't be automated; the token is per-login — re-capture when it
+  lapses. It gives full account access, so keep it private.
 - **Plata** — `auth_request` + `installation_id`, captured from a single mitmproxy session. Plata's login
   blob is signed on-device and can't be rebuilt, so the provider replays the captured Auth request to mint
   a fresh session token each run. From the capture: base64-encode the request body of the

@@ -1,0 +1,128 @@
+"""Mercado Pago México, through the signed-in mobile app's home hub. Read-only.
+
+Mercado Pago's developer API only covers payments, so this reads what the app's home screen shows.
+`GET https://mobile.mercadopago.com/mp-home-hub/home` returns the home layout as JSON; its
+`banking_andes` section has one tab per balance group (Saldo, Apartados, Criptomonedas), and each tab's
+`banking_balance_andes` item carries `money_amount_items` already valued in MXN.
+
+Signing in on the app needs a device-attestation token and a `face_validation` challenge that cannot be
+reproduced off-device, so the provider never logs in: the caller captures their own signed-in session
+(e.g. a mitmproxy capture of the app) and passes the credentials it yields. The required ones are the
+`Authorization: Bearer APP_USR-…` `token`, the MeLi `session_id` and the `device_id`. The token is
+per-login and comparatively short-lived; the session and device ids are stable for the install. If a
+read is rejected, pass the optional `client_info`, `d2id`, `device_fsid` and `frontend_session_id`
+captured alongside them.
+
+Reverse-engineered and unofficial: not affiliated with Mercado Pago, automated access may be against its
+terms, and the token gives full access to the account, so keep it private.
+"""
+from __future__ import annotations
+
+from decimal import Decimal, InvalidOperation
+
+import httpx
+
+from ..core import AccountKind, Balance, FinscraperError, LayoutChanged, Provider, SessionExpired
+
+BASE_URL = "https://mobile.mercadopago.com"
+# App constants (not credentials), overridable; mirror a recent signed-in iOS app so the read looks normal.
+USER_AGENT = "MercadoPago-iOS/2.457.1 (iPhone; iOS 27.0.1)"
+APP_VERSION = "2.457.1"
+MELI_APPS = "ML-10.580.3"
+# The banking section's tabs, by their Spanish title.
+KINDS = {
+    "Saldo": AccountKind.CHECKING,
+    "Apartados": AccountKind.SAVINGS,
+    "Criptomonedas": AccountKind.CRYPTO,
+}
+# Per-user ids the risk gateway may want in addition to the token; sent only when supplied.
+OPTIONAL_HEADERS = {
+    "x-client-info": "client_info",
+    "x-d2id": "d2id",
+    "x-device-fsid": "device_fsid",
+    "x-frontend-session-id": "frontend_session_id",
+}
+
+
+class MercadoPago(Provider):
+    id = "mercado_pago"
+    name = "Mercado Pago"
+    auth_fields = ("token", "session_id", "device_id")
+
+    def __init__(
+        self,
+        *,
+        user_agent: str = USER_AGENT,
+        app_version: str = APP_VERSION,
+        meli_apps: str = MELI_APPS,
+        client: httpx.Client | None = None,
+        base_url: str = BASE_URL,
+        **auth: str,
+    ) -> None:
+        super().__init__(**auth)
+        self._client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=30)
+        self._headers = {
+            "Authorization": f"Bearer {self.auth['token']}",
+            "x-meli-session-id": self.auth["session_id"],
+            "x-device-id": self.auth["device_id"],
+            "User-Agent": user_agent,
+            "x-platform": "ios",
+            "x-app-version": app_version,
+            "x-meli-apps": meli_apps,
+            "x-page-id": "mp3_home",
+            "request-target": "get /mp-home-hub/home",
+            "Accept": "*/*",
+            "Accept-Language": "es-MX",
+        }
+        for header, key in OPTIONAL_HEADERS.items():
+            if self.auth.get(key):
+                self._headers[header] = self.auth[key]
+
+    def fetch_balances(self) -> list[Balance]:
+        balances = []
+        for tab in self._banking_tabs(self._home()):
+            title = tab.get("title") or "?"
+            item = next((it for it in (tab.get("items") or []) if it.get("type") == "banking_balance_andes"), None)
+            if item is None:
+                continue  # a tab with only promos/banners and no balance
+            amounts = (item.get("params") or {}).get("money_amount_items") or []
+            if not amounts:
+                raise LayoutChanged(f"mercado_pago: no amount for {title}; the app's layout changed")
+            # The first amount is the balance; any others (e.g. Saldo's 12-month yield) are informational.
+            kind = KINDS.get(title, AccountKind.OTHER)
+            balances.append(Balance(self.id, title, kind, _amount(amounts[0], title), "MXN"))
+        if not balances:
+            raise LayoutChanged("mercado_pago: no balances in the home hub; the app's layout changed")
+        return balances
+
+    def _home(self) -> dict:
+        response = self._client.get(
+            "/mp-home-hub/home",
+            params={"has_companion": "true", "is_in_call": "false"},
+            headers=self._headers,
+        )
+        if response.status_code in (401, 403):
+            raise SessionExpired("mercado_pago: token rejected; capture a fresh Bearer token from your signed-in app")
+        response.raise_for_status()
+        try:
+            return response.json()
+        except ValueError:
+            raise LayoutChanged("mercado_pago: home hub did not return JSON; the app's API changed") from None
+
+    @staticmethod
+    def _banking_tabs(home: dict) -> list[dict]:
+        for section in home.get("sections") or []:
+            if section.get("type") == "banking_andes":
+                return (section.get("content") or {}).get("tabs") or []
+        raise LayoutChanged("mercado_pago: no banking section in the home hub; the app's layout changed")
+
+
+def _amount(item: dict, title: str) -> Decimal:
+    currency = item.get("currency")
+    if currency != "MXN":
+        raise FinscraperError(f"mercado_pago: {title} is in {currency!r}, expected MXN")
+    cleaned = str(item.get("amount", "")).replace(",", "").replace("$", "").strip()  # amounts arrive as plain decimals
+    try:
+        return Decimal(cleaned)
+    except InvalidOperation:
+        raise LayoutChanged(f"mercado_pago: unreadable amount for {title}; the app's API changed") from None
