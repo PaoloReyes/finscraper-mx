@@ -11,6 +11,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | Id | Institution | Status | Auth |
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
+| `didi` | DiDi Cuenta | ✅ Cuenta balance in MXN | mobile-app session (`token`, `wsgsig`, `device_id`) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
 | `mercado_pago` | Mercado Pago | ✅ Saldo, Apartados, Cripto in MXN | mobile-app session (`token`, `session_id`, `device_id`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
@@ -60,6 +61,12 @@ Each provider's auth fields are credentials you create once and store yourself (
 and never persists them):
 
 - **Bitso** — a read-only API key from Bitso's site.
+- **DiDi** — captured from your own signed-in DiDi Dinero app (no public API; reverse-engineered and
+  unofficial). Sign in on the app with a capture running (e.g. mitmproxy), find the
+  `POST wallet.didipay.com/sofipo/uchome/v0/main` request, and copy the `token` inside its
+  `sofi-header-hint-content` header, its `wsgsig` header and its `deviceId` query parameter into
+  `auth_didi.json` as `{"token": "…", "wsgsig": "…", "device_id": "…"}`. The token lasts as long as the
+  app session; re-capture when a read raises `SessionExpired`. Keep it private.
 - **GBM** — a `refresh_token` from a one-time MFA login:
   `get_provider("gbm").login(user, password, code)` returns it. Reuse it until it expires (then log in
   again). GBM optionally takes `contract_id` / `accounts` to pin strategies, and `location=(lat, lon)`.
