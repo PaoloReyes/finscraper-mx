@@ -11,6 +11,7 @@ from ..core import Provider
 # id -> (module, class)
 PROVIDERS: dict[str, tuple[str, str]] = {
     "bitso": ("finscraper_mx.institutions.bitso", "Bitso"),
+    "didi": ("finscraper_mx.institutions.didi", "Didi"),
     "gbm": ("finscraper_mx.institutions.gbm", "Gbm"),
     "mercado_pago": ("finscraper_mx.institutions.mercado_pago", "MercadoPago"),
     "mifel": ("finscraper_mx.institutions.mifel", "Mifel"),

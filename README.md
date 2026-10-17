@@ -11,6 +11,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | Id | Institution | Status | Auth |
 |---|---|---|---|
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
+| `didi` | DiDi Cuenta | ✅ Saldo + Mis Ahorros in MXN | captured signed app request (`token`, `signed_query`, `wsgsig` + `secdd` headers; replayed verbatim because the signature is request-bound) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
 | `mercado_pago` | Mercado Pago | ✅ Saldo, Apartados, Cripto in MXN | mobile-app session (`token`, `session_id`, `device_id`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
@@ -74,6 +75,17 @@ and never persists them):
   `d2id`, `device_fsid` and `frontend_session_id`. App login needs device attestation and a
   face-validation challenge, so it can't be automated; the token is per-login — re-capture when it
   lapses. It gives full account access, so keep it private.
+- **DiDi** — captured from your own signed-in mobile app (DiDi has no public wallet API, so this is
+  reverse-engineered and unofficial). The app signs each request with a native `wsgsig`/`secdd`
+  signature computed over that exact request; it can't be rebuilt off-device and only validates the
+  request it was made for, so the provider replays the captured request verbatim. Open DiDi Cuenta (its
+  SoFiPo wallet) with a capture running (e.g. mitmproxy), find the
+  `POST wallet.didipay.com/sofipo/uchome/v0/main` request, and copy into `auth.json`: the `token` from
+  its `sofi-header-hint-content` header, the request's exact query string (`signed_query`), and the
+  `wsgsig`, `secdd_authentication`, `secdd_challenge`, `oid` and `rid` headers. Override `sofi_hint`,
+  `didi_hint` or `body` if your capture differs from the defaults. The signature is request-bound and
+  short-lived, so recapture when a read raises `SessionExpired`. It gives wallet access, so keep it
+  private.
 - **Plata** — `auth_request` + `installation_id`, captured from a single mitmproxy session. Plata's login
   blob is signed on-device and can't be rebuilt, so the provider replays the captured Auth request to mint
   a fresh session token each run. From the capture: base64-encode the request body of the
