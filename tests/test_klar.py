@@ -105,6 +105,11 @@ def test_non_json_reply_names_the_call_and_status():
         provider(client).fetch_balances()
 
 
+def test_optional_proxy_routes_the_client():
+    proxied = get_provider("klar")(**AUTH, proxy="http://127.0.0.1:8899")
+    assert any(str(t._pool._proxy_url.origin) == "http://127.0.0.1:8899" for t in proxied._client._mounts.values())
+
+
 def test_reads_non_credit_balances_in_mxn():
     balances = {b.account: b for b in provider().fetch_balances()}
     assert set(balances) == {"Cuenta", "Ahorro", "Depósito en garantía"}  # CREDIT + DEBIT_PENDING excluded

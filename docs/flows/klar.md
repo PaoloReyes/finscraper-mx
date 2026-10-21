@@ -99,6 +99,11 @@ python scripts/klar_capture.py          # prints the laptop IP + exact phone ste
 
 Notes:
 
+- Klar's AWS load balancer rejects datacenter IPs: from a cloud server, login returns an HTML `403`
+  (`awselb/2.0`) whatever the client. Pass the optional `proxy` auth value (`http://host:port`) to send
+  this provider's calls through a proxy on a residential connection, e.g. a home machine reached over
+  Tailscale running `pip install proxy.py && proxy --hostname <tailscale-ip> --port 8899`.
+
 - After the read, the provider calls `POST gw.klar.mx/api/v2/auth/logout` (best-effort) to **release its
   session**. Klar allows one session per account and it lingers after the token expires, so skipping logout
   would make the next read — or the phone — hit `423`. Logout does not un-pair the device.

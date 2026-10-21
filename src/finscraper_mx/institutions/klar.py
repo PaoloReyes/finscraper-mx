@@ -20,6 +20,10 @@ Klar enforces **one active session per account**: if the phone is signed in, log
 read raises `SessionExpired` — close the app (or let it idle) and retry. Logging the phone out does not
 un-pair it, so the phone and this reader share the one trusted device, just not a session at the same time.
 
+Klar's AWS firewall rejects datacenter IPs (a cloud server gets an HTML `403` on login). An optional
+`proxy` auth value (e.g. `http://100.64.0.2:8899`) routes this provider's calls, and only these, through
+a proxy on a residential connection, such as a home machine over Tailscale.
+
 Reverse-engineered and unofficial: not affiliated with Klar, automated access may be against its terms, and
 the key + credentials give full account access, so keep them private. See `docs/flows/klar.md` for how to
 capture the device key and id from your phone.
@@ -81,7 +85,8 @@ class Klar(Provider):
         self._session_id = str(uuid.uuid4())
         self._token: str | None = None
         # follow_redirects stays off: the MFA handshake is a 307 we must answer, not follow.
-        self._client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=30, follow_redirects=False)
+        self._client = client or httpx.Client(
+            base_url=base_url.rstrip("/"), timeout=30, follow_redirects=False, proxy=self.auth.get("proxy") or None)
 
     # ---- the one read path ----
 
