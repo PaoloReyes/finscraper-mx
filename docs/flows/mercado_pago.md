@@ -7,10 +7,11 @@ device attestation and a face-validation challenge that can't be reproduced off-
 never logs in; it replays the captured session. Reads one `Balance` per tab of the home hub's banking
 section (Saldo, Apartados, Criptomonedas), in MXN.
 
-The first read after a while (typically the first of the day) can return a stale snapshot, the same
-one the app paints before it refreshes. The provider stays stateless and reconciles instead: it re-reads
-the home hub (1.5 s apart) until two consecutive reads report the same amounts, at most four reads, and
-returns the latest read if they never agree.
+The first read of the day can return a stale snapshot, the same one the app paints before it
+refreshes. So the day's first `fetch_balances()` re-reads the home hub (1.5 s apart) until two consecutive
+reads report the same amounts, at most four reads, returning the latest if they never agree. The date it
+settled on is kept in memory per `session_id` (Mexico City time, never written to disk), so later calls
+that day in the same process read once, and a fresh process reconciles its first read again.
 
 ## One-time setup (the user captures their own app session)
 
@@ -38,6 +39,7 @@ sequenceDiagram
 
   C->>P: get_provider("mercado_pago")(token, session_id, device_id)
   C->>P: fetch_balances()
+  Note over P: already settled today, in this process? then a single read, else loop
   loop until two consecutive reads agree - at most 4 reads, 1.5 s apart
     P->>S: GET /mp-home-hub/home  (Authorization Bearer, x-meli-session-id, x-device-id)
     alt token rejected

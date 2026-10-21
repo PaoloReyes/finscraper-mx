@@ -4,7 +4,8 @@ Mercado Pago's developer API only covers payments, so this reads what the app's 
 `GET https://mobile.mercadopago.com/mp-home-hub/home` returns the home layout as JSON; its
 `banking_andes` section has one tab per balance group (Saldo, Apartados, Criptomonedas), and each tab's
 `banking_balance_andes` item carries `money_amount_items` already valued in MXN. The first read after
-a while can be a stale snapshot, so `fetch_balances()` re-reads until two consecutive reads agree.
+the day can be a stale snapshot, so the day's first `fetch_balances()` re-reads until two consecutive reads
+agree; later calls that day (in the same process) read once.
 
 Signing in on the app needs a device-attestation token and a `face_validation` challenge that cannot be
 reproduced off-device, so the provider never logs in: the caller captures their own signed-in session
@@ -20,6 +21,7 @@ terms, and the token gives full access to the account, so keep it private.
 from __future__ import annotations
 
 import time
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -37,10 +39,14 @@ KINDS = {
     "Apartados": AccountKind.SAVINGS,
     "Criptomonedas": AccountKind.CRYPTO,
 }
-# The home hub's first read after a while answers from a stale snapshot (the app shows it, then refreshes),
-# so a read is only trusted once two consecutive reads agree. Up to MAX_READS reads, SETTLE_SECONDS apart.
+# The home hub's first read of the day answers from a stale snapshot (the app shows it, then refreshes),
+# so that read is only trusted once two consecutive reads agree. Up to MAX_READS reads, SETTLE_SECONDS apart.
 MAX_READS = 4
 SETTLE_SECONDS = 1.5
+MEXICO_CITY = timezone(timedelta(hours=-6))  # no DST since 2022; avoids needing tzdata
+# session_id -> the Mexico City date it last settled on. In memory only (never written to disk), so a new
+# process simply reconciles its first read again.
+_settled_on: dict[str, date] = {}
 # Per-user ids the risk gateway may want in addition to the token; sent only when supplied.
 OPTIONAL_HEADERS = {
     "x-client-info": "client_info",
@@ -87,8 +93,16 @@ class MercadoPago(Provider):
                 self._headers[header] = self.auth[key]
 
     def fetch_balances(self) -> list[Balance]:
-        # Stateless reconciliation: re-read until two consecutive reads match, rather than remembering
-        # (on disk) whether today's first read already happened.
+        today = datetime.now(MEXICO_CITY).date()
+        session = self.auth["session_id"]
+        if _settled_on.get(session) == today:
+            return self._read()  # already reconciled today: one read is enough
+        balances = self._settled_read()
+        _settled_on[session] = today
+        return balances
+
+    def _settled_read(self) -> list[Balance]:
+        # Re-read until two consecutive reads match.
         previous = self._read()
         for _ in range(MAX_READS - 1):
             time.sleep(self._settle_seconds)

@@ -4,6 +4,8 @@ from decimal import Decimal
 import httpx
 import pytest
 
+from finscraper_mx.institutions import mercado_pago
+
 from finscraper_mx import AccountKind, AuthRequired, FinscraperError, LayoutChanged, SessionExpired, get_provider
 
 AUTH = {"token": "APP_USR-fake-token", "session_id": "fake-session", "device_id": "fake-device"}
@@ -55,6 +57,11 @@ def fake_app(payload=None, status=200):
 def provider(client=None, **overrides):
     auth = {**AUTH, **overrides}
     return get_provider("mercado_pago")(client=client or fake_app(), settle_seconds=0, **auth)
+
+
+@pytest.fixture(autouse=True)
+def fresh_day():
+    mercado_pago._settled_on.clear()  # every test starts as the day's first read
 
 
 def test_requires_auth():
@@ -155,3 +162,21 @@ def test_never_settling_returns_the_latest_read():
     [saldo] = provider(client).fetch_balances()
     assert saldo.amount == Decimal("4.00")
     assert len(reads) == 4
+
+
+def test_later_reads_that_day_read_once():
+    client, reads = sequenced_app("9999.99", "12345.67")
+    mp = provider(client)
+    mp.fetch_balances()
+    assert len(reads) == 3  # first of the day: reconciled
+    [saldo] = mp.fetch_balances()
+    assert saldo.amount == Decimal("12345.67")
+    assert len(reads) == 4  # same day: a single read
+
+
+def test_a_new_day_reconciles_again():
+    client, reads = sequenced_app("12345.67")
+    mp = provider(client)
+    mercado_pago._settled_on[AUTH["session_id"]] = mercado_pago.date(2000, 1, 1)
+    mp.fetch_balances()
+    assert len(reads) == 2
