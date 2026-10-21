@@ -90,6 +90,12 @@ def test_invalid_private_key_is_auth_required():
         get_provider("klar")(client=fake_app(), **{**AUTH, "private_key_pem": "not a key"})
 
 
+def test_private_key_on_one_line_with_escaped_newlines():
+    one_line = PRIVATE_PEM.strip().replace("\n", "\\n")
+    assert "\n" not in one_line
+    assert len(provider(private_key_pem=one_line).fetch_balances()) == 3
+
+
 def test_reads_non_credit_balances_in_mxn():
     balances = {b.account: b for b in provider().fetch_balances()}
     assert set(balances) == {"Cuenta", "Ahorro", "Depósito en garantía"}  # CREDIT + DEBIT_PENDING excluded
