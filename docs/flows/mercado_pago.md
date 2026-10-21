@@ -7,6 +7,11 @@ device attestation and a face-validation challenge that can't be reproduced off-
 never logs in; it replays the captured session. Reads one `Balance` per tab of the home hub's banking
 section (Saldo, Apartados, Criptomonedas), in MXN.
 
+The first read after a while (typically the first of the day) can return a stale snapshot, the same
+one the app paints before it refreshes. The provider stays stateless and reconciles instead: it re-reads
+the home hub (1.5 s apart) until two consecutive reads report the same amounts, at most four reads, and
+returns the latest read if they never agree.
+
 ## One-time setup (the user captures their own app session)
 
 ```mermaid
@@ -33,16 +38,19 @@ sequenceDiagram
 
   C->>P: get_provider("mercado_pago")(token, session_id, device_id)
   C->>P: fetch_balances()
-  P->>S: GET /mp-home-hub/home  (Authorization Bearer, x-meli-session-id, x-device-id)
-  alt token rejected
-    S-->>P: 401 or 403
-    P-->>C: SessionExpired
-  else signed in
-    S-->>P: home hub JSON
-    Note over P: sections, type banking_andes, content.tabs
-    loop each tab - Saldo, Apartados, Criptomonedas
-      Note over P: item type banking_balance_andes, money_amount_items first amount, currency MXN
+  loop until two consecutive reads agree - at most 4 reads, 1.5 s apart
+    P->>S: GET /mp-home-hub/home  (Authorization Bearer, x-meli-session-id, x-device-id)
+    alt token rejected
+      S-->>P: 401 or 403
+      P-->>C: SessionExpired
+    else signed in
+      S-->>P: home hub JSON
+      Note over P: sections, type banking_andes, content.tabs
+      loop each tab - Saldo, Apartados, Criptomonedas
+        Note over P: item type banking_balance_andes, money_amount_items first amount, currency MXN
+      end
     end
-    P-->>C: list of Balance - Saldo, Apartados, Criptomonedas - in MXN
+    Note over P: compare Saldo, Apartados, Criptomonedas with the previous read
   end
+  P-->>C: list of Balance - Saldo, Apartados, Criptomonedas - in MXN
 ```

@@ -54,7 +54,7 @@ def fake_app(payload=None, status=200):
 
 def provider(client=None, **overrides):
     auth = {**AUTH, **overrides}
-    return get_provider("mercado_pago")(client=client or fake_app(), **auth)
+    return get_provider("mercado_pago")(client=client or fake_app(), settle_seconds=0, **auth)
 
 
 def test_requires_auth():
@@ -122,3 +122,36 @@ def test_optional_ids_are_sent_as_headers():
     assert seen.get("x-client-info") == "app_id=1;user_id=2"
     assert seen.get("x-d2id") == "fake-d2id"
     assert "x-device-fsid" not in seen  # not supplied → not sent
+
+
+def sequenced_app(*saldos):
+    """Answers each read with the next Saldo amount (the last one repeats); records how many reads ran."""
+    reads = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        amount = saldos[min(len(reads), len(saldos) - 1)]
+        reads.append(amount)
+        return httpx.Response(200, json=home([tab("Saldo", balance_item(money(amount)))]))
+
+    return httpx.Client(transport=httpx.MockTransport(handler), base_url="https://mobile.mercadopago.com"), reads
+
+
+def test_stale_first_read_is_replaced_by_the_settled_value():
+    client, reads = sequenced_app("9999.99", "12345.67")  # first read of the day is a stale snapshot
+    [saldo] = provider(client).fetch_balances()
+    assert saldo.amount == Decimal("12345.67")
+    assert reads == ["9999.99", "12345.67", "12345.67"]
+
+
+def test_two_matching_reads_settle_immediately():
+    client, reads = sequenced_app("12345.67")
+    [saldo] = provider(client).fetch_balances()
+    assert saldo.amount == Decimal("12345.67")
+    assert len(reads) == 2
+
+
+def test_never_settling_returns_the_latest_read():
+    client, reads = sequenced_app("1.00", "2.00", "3.00", "4.00", "5.00")
+    [saldo] = provider(client).fetch_balances()
+    assert saldo.amount == Decimal("4.00")
+    assert len(reads) == 4

@@ -3,7 +3,8 @@
 Mercado Pago's developer API only covers payments, so this reads what the app's home screen shows.
 `GET https://mobile.mercadopago.com/mp-home-hub/home` returns the home layout as JSON; its
 `banking_andes` section has one tab per balance group (Saldo, Apartados, Criptomonedas), and each tab's
-`banking_balance_andes` item carries `money_amount_items` already valued in MXN.
+`banking_balance_andes` item carries `money_amount_items` already valued in MXN. The first read after
+a while can be a stale snapshot, so `fetch_balances()` re-reads until two consecutive reads agree.
 
 Signing in on the app needs a device-attestation token and a `face_validation` challenge that cannot be
 reproduced off-device, so the provider never logs in: the caller captures their own signed-in session
@@ -18,6 +19,7 @@ terms, and the token gives full access to the account, so keep it private.
 """
 from __future__ import annotations
 
+import time
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -35,6 +37,10 @@ KINDS = {
     "Apartados": AccountKind.SAVINGS,
     "Criptomonedas": AccountKind.CRYPTO,
 }
+# The home hub's first read after a while answers from a stale snapshot (the app shows it, then refreshes),
+# so a read is only trusted once two consecutive reads agree. Up to MAX_READS reads, SETTLE_SECONDS apart.
+MAX_READS = 4
+SETTLE_SECONDS = 1.5
 # Per-user ids the risk gateway may want in addition to the token; sent only when supplied.
 OPTIONAL_HEADERS = {
     "x-client-info": "client_info",
@@ -55,11 +61,13 @@ class MercadoPago(Provider):
         user_agent: str = USER_AGENT,
         app_version: str = APP_VERSION,
         meli_apps: str = MELI_APPS,
+        settle_seconds: float = SETTLE_SECONDS,
         client: httpx.Client | None = None,
         base_url: str = BASE_URL,
         **auth: str,
     ) -> None:
         super().__init__(**auth)
+        self._settle_seconds = settle_seconds
         self._client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=30)
         self._headers = {
             "Authorization": f"Bearer {self.auth['token']}",
@@ -79,6 +87,18 @@ class MercadoPago(Provider):
                 self._headers[header] = self.auth[key]
 
     def fetch_balances(self) -> list[Balance]:
+        # Stateless reconciliation: re-read until two consecutive reads match, rather than remembering
+        # (on disk) whether today's first read already happened.
+        previous = self._read()
+        for _ in range(MAX_READS - 1):
+            time.sleep(self._settle_seconds)
+            current = self._read()
+            if _amounts(current) == _amounts(previous):
+                return current
+            previous = current
+        return previous  # never settled: the latest read is the freshest
+
+    def _read(self) -> list[Balance]:
         balances = []
         for tab in self._banking_tabs(self._home()):
             title = tab.get("title") or "?"
@@ -115,6 +135,10 @@ class MercadoPago(Provider):
             if section.get("type") == "banking_andes":
                 return (section.get("content") or {}).get("tabs") or []
         raise LayoutChanged("mercado_pago: no banking section in the home hub; the app's layout changed")
+
+
+def _amounts(balances: list[Balance]) -> list[tuple[str, Decimal]]:
+    return [(b.account, b.amount) for b in balances]  # as_of differs between reads, so compare the rest
 
 
 def _amount(item: dict, title: str) -> Decimal:
