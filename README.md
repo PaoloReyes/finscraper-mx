@@ -13,6 +13,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | `bitso` | Bitso | ✅ balances in MXN | read-only API key (`api_key`, `api_secret`) |
 | `didi` | DiDi Cuenta | ✅ Saldo + Mis Ahorros in MXN | captured signed app request (`token`, `signed_query`, `wsgsig` + `secdd` headers; replayed verbatim because the signature is request-bound) |
 | `gbm` | GBM+ | ✅ account values in MXN | refresh token (one-time MFA login via `Gbm.login`) |
+| `klar` | Klar México | ✅ Cuenta, Ahorro, Depósito en garantía in MXN (credit excluded) | device RSA key + trusted-device id captured from the paired phone, plus `username` + `password` (`private_key_pem`, `device_id`, `username`, `password`) |
 | `mercado_pago` | Mercado Pago | ✅ Saldo, Apartados, Cripto in MXN | mobile-app session (`token`, `session_id`, `device_id`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
 | `plata` | Plata | ✅ accounts + investment in MXN (incl. Plata Acciones) | `auth_request` + `installation_id` (capture the app's Auth call from a proxy; replayed to mint a session token) |
@@ -92,6 +93,16 @@ and never persists them):
   `AuthFlowService/Auth` POST (→ `auth_request`) and copy the `x-plata-installation-id` header
   (→ `installation_id`). It's long-lived (observed still valid ~10 h after capture) and is invalidated when
   Plata rotates the device key; recapture it and regenerate the file when a read raises `SessionExpired`.
+
+- **Klar** — the device RSA key + its trusted-device id, captured from your own paired phone, plus your
+  `username`/`password`. Klar gates every read with a per-request RSA challenge-response bound to a trusted
+  device; the library can't pair itself (pairing is KYC-gated with a face scan + SMS), so it reuses the
+  phone's registered key. Capture is a one-time, scripted process (`scripts/klar_capture.py` — it unlocks
+  Klar's in-app key-inspector via a Firebase Remote Config flag over mitmproxy and reads the `deviceId`
+  off a gw refresh); full step-by-step in [`docs/flows/klar.md`](docs/flows/klar.md). Put the four fields in
+  `auth.json`. Klar allows **one active session per account**, so a read raises `SessionExpired` while the
+  phone app is signed in — close/idle the app and retry; this does not un-pair the phone. It's unofficial
+  and reverse-engineered, and the key + credentials give full account access, so keep them private.
 
 ## Design
 

@@ -13,6 +13,7 @@ PROVIDERS: dict[str, tuple[str, str]] = {
     "bitso": ("finscraper_mx.institutions.bitso", "Bitso"),
     "didi": ("finscraper_mx.institutions.didi", "Didi"),
     "gbm": ("finscraper_mx.institutions.gbm", "Gbm"),
+    "klar": ("finscraper_mx.institutions.klar", "Klar"),
     "mercado_pago": ("finscraper_mx.institutions.mercado_pago", "MercadoPago"),
     "mifel": ("finscraper_mx.institutions.mifel", "Mifel"),
     "plata": ("finscraper_mx.institutions.plata", "Plata"),

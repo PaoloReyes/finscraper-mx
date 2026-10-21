@@ -29,6 +29,7 @@ flowchart TD
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> didi["DiDi Cuenta<br/>auth: token + signed_query + wsgsig<br/>captured signed request, replayed verbatim"]
   reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
+  reg --> klar["Klar México<br/>auth: private_key_pem + device_id + username + password<br/>device key captured from paired phone; per-request RSA MFA"]
   reg --> mp["Mercado Pago<br/>auth: token + session_id + device_id<br/>captured from the signed-in app"]
   reg --> mifel["Banco Mifel<br/>auth: username + password<br/>Keycloak password grant"]
   reg --> plata["Plata<br/>auth: auth_request + installation_id<br/>capture Auth call from proxy; replayed to mint a session token"]
@@ -36,6 +37,7 @@ flowchart TD
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   didi -->|"httpx"| dapi[("wallet.didipay.com/sofipo")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
+  klar -->|"httpx"| kapi[("api.klar.mx (Keycloak login + MFA-gated reads)")]
   mp -->|"httpx"| mapi[("mobile.mercadopago.com/mp-home-hub/home")]
   mifel -->|"curl-cffi (login) + httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
   plata -->|"httpx (HTTP/2 gRPC)"| papi[("prime.platacard.mx")]
@@ -43,6 +45,7 @@ flowchart TD
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
   didi -->|"fetch_balances()"| bal
   gbm -->|"fetch_balances()"| bal
+  klar -->|"fetch_balances()"| bal
   mp -->|"fetch_balances()"| bal
   mifel -->|"fetch_balances()"| bal
   plata -->|"fetch_balances()"| bal
@@ -54,6 +57,7 @@ flowchart TD
 | `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
 | `didi` | `token`, `signed_query`, `wsgsig` (+ `secdd`/`oid`/`rid`; captured signed request replayed verbatim, as wsgsig is request-bound) | Saldo (savings) + Mis Ahorros (fixed-term), in MXN | SoFiPo app home API |
 | `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
+| `klar` | `private_key_pem`, `device_id`, `username`, `password` (device key + trusted-device id captured from the paired phone) | Cuenta, Ahorro, Depósito en garantía, in MXN (credit excluded) | Keycloak 2-step login + per-request RSA MFA on api.klar.mx |
 | `mercado_pago` | `token`, `session_id`, `device_id` (captured app session) | per balance tab, in MXN | mobile home-hub API |
 | `mifel` | `username`, `password` | account balances, in MXN | Keycloak + integracion API |
 | `plata` | `auth_request`, `installation_id` (capture the Auth call from proxy; replayed to mint a session token) | accounts + investment, in MXN (Acciones via Google FX) | mobile app gRPC API |
@@ -62,8 +66,10 @@ flowchart TD
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
 [`docs/flows/didi.md`](docs/flows/didi.md) ·
 [`docs/flows/gbm.md`](docs/flows/gbm.md) ·
+[`docs/flows/klar.md`](docs/flows/klar.md) ·
 [`docs/flows/mercado_pago.md`](docs/flows/mercado_pago.md) ·
 [`docs/flows/mifel.md`](docs/flows/mifel.md) ·
+[`docs/flows/nu.md`](docs/flows/nu.md) ·
 [`docs/flows/plata.md`](docs/flows/plata.md) ·
 [`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).
 
