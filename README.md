@@ -100,7 +100,8 @@ and never persists them):
   phone's registered key. Capture is a one-time, scripted process (`scripts/klar_capture.py` — it unlocks
   Klar's in-app key-inspector via a Firebase Remote Config flag over mitmproxy and reads the `deviceId`
   off a gw refresh); full step-by-step in [`docs/flows/klar.md`](docs/flows/klar.md). Put the four fields in
-  `auth.json`. Klar allows **one active session per account**, so a read raises `SessionExpired` while the
+  `auth.json` (plus an optional `proxy`: Klar blocks datacenter IPs, so a cloud server must route through a
+  residential proxy). Klar allows **one active session per account**, so a read raises `SessionExpired` while the
   phone app is signed in — close/idle the app and retry; this does not un-pair the phone. It's unofficial
   and reverse-engineered, and the key + credentials give full account access, so keep them private.
 

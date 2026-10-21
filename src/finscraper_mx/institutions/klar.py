@@ -20,6 +20,10 @@ Klar enforces **one active session per account**: if the phone is signed in, log
 read raises `SessionExpired` — close the app (or let it idle) and retry. Logging the phone out does not
 un-pair it, so the phone and this reader share the one trusted device, just not a session at the same time.
 
+Klar's AWS firewall rejects datacenter IPs (a cloud server gets an HTML `403` on login). An optional
+`proxy` auth value (e.g. `http://100.64.0.2:8899`) routes this provider's calls, and only these, through
+a proxy on a residential connection, such as a home machine over Tailscale.
+
 Reverse-engineered and unofficial: not affiliated with Klar, automated access may be against its terms, and
 the key + credentials give full account access, so keep them private. See `docs/flows/klar.md` for how to
 capture the device key and id from your phone.
@@ -81,7 +85,8 @@ class Klar(Provider):
         self._session_id = str(uuid.uuid4())
         self._token: str | None = None
         # follow_redirects stays off: the MFA handshake is a 307 we must answer, not follow.
-        self._client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=30, follow_redirects=False)
+        self._client = client or httpx.Client(
+            base_url=base_url.rstrip("/"), timeout=30, follow_redirects=False, proxy=self.auth.get("proxy") or None)
 
     # ---- the one read path ----
 
@@ -147,15 +152,13 @@ class Klar(Provider):
                 "klar: a session is already active for this account — Klar allows one at a time. "
                 "Close the Klar app (or let it idle until its session lapses), then retry"
             )
-        payload = _json(response)
-        status = (payload.get("mfa") or {}).get("status")
-        if status == "MFA_PAIRING_REQUIRED" or response.status_code == 412:
-            raise SessionExpired(
-                "klar: this device is not registered as a trusted device (MFA_PAIRING_REQUIRED); "
-                "recapture private_key_pem and device_id from your paired phone"
-            )
         if response.status_code == 401:
             raise SessionExpired("klar: wrong username or password") from None
+        if response.status_code == 412:
+            raise SessionExpired(_NOT_PAIRED)
+        payload = _json(response)
+        if (payload.get("mfa") or {}).get("status") == "MFA_PAIRING_REQUIRED":
+            raise SessionExpired(_NOT_PAIRED)
         return payload
 
     # ---- per-request MFA challenge-response ----
@@ -209,11 +212,20 @@ def _pem(value: str) -> str:
     return value.strip().replace("\\r\\n", "\n").replace("\\n", "\n")
 
 
+_NOT_PAIRED = ("klar: this device is not registered as a trusted device (MFA_PAIRING_REQUIRED); "
+               "recapture private_key_pem and device_id from your paired phone")
+
+
 def _json(response: httpx.Response) -> dict:
     try:
         return response.json()
     except ValueError:
-        raise LayoutChanged("klar: expected JSON from the API; the app's API changed") from None
+        # name the call and status (an error page, a WAF block, an empty body) so the failure is diagnosable
+        snippet = " ".join(response.text[:120].split())
+        raise LayoutChanged(
+            f"klar: expected JSON from {response.request.method} {response.request.url.path}, got HTTP "
+            f"{response.status_code} {response.headers.get('content-type', '')!r}: {snippet!r}"
+        ) from None
 
 
 def _label(account: dict) -> str:

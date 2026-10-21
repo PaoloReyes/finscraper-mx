@@ -96,6 +96,20 @@ def test_private_key_on_one_line_with_escaped_newlines():
     assert len(provider(private_key_pem=one_line).fetch_balances()) == 3
 
 
+def test_non_json_reply_names_the_call_and_status():
+    def handler(request):
+        return httpx.Response(403, text="<html>Request blocked</html>", headers={"content-type": "text/html"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://api.klar.mx")
+    with pytest.raises(LayoutChanged, match=r"POST /login/api/auth/v1/login, got HTTP 403 'text/html'.*Request blocked"):
+        provider(client).fetch_balances()
+
+
+def test_optional_proxy_routes_the_client():
+    proxied = get_provider("klar")(**AUTH, proxy="http://127.0.0.1:8899")
+    assert any(str(t._pool._proxy_url.origin) == "http://127.0.0.1:8899" for t in proxied._client._mounts.values())
+
+
 def test_reads_non_credit_balances_in_mxn():
     balances = {b.account: b for b in provider().fetch_balances()}
     assert set(balances) == {"Cuenta", "Ahorro", "Depósito en garantía"}  # CREDIT + DEBIT_PENDING excluded
