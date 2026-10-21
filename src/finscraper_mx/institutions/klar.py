@@ -72,7 +72,7 @@ class Klar(Provider):
     ) -> None:
         super().__init__(**auth)
         try:
-            self._key = serialization.load_pem_private_key(self.auth["private_key_pem"].encode(), password=None)
+            self._key = serialization.load_pem_private_key(_pem(self.auth["private_key_pem"]).encode(), password=None)
         except (ValueError, TypeError) as error:
             raise AuthRequired(f"klar: private_key_pem is not a valid PEM private key ({error})") from None
         if not isinstance(self._key, rsa.RSAPrivateKey):
@@ -202,6 +202,11 @@ class Klar(Provider):
         if extra:
             headers.update(extra)
         return headers
+
+
+def _pem(value: str) -> str:
+    """Accept the PEM as written, or on one line with literal \\n escapes (how .env files usually carry it)."""
+    return value.strip().replace("\\r\\n", "\n").replace("\\n", "\n")
 
 
 def _json(response: httpx.Response) -> dict:
