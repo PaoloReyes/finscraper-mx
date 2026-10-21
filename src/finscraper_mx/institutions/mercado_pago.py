@@ -3,7 +3,7 @@
 Mercado Pago's developer API only covers payments, so this reads what the app's home screen shows.
 `GET https://mobile.mercadopago.com/mp-home-hub/home` returns the home layout as JSON; its
 `banking_andes` section has one tab per balance group (Saldo, Apartados, Criptomonedas), and each tab's
-`banking_balance_andes` item carries `money_amount_items` already valued in MXN. The first read after
+`banking_balance_andes` item carries `money_amount_items` already valued in MXN. The first read of
 the day can be a stale snapshot, so the day's first `fetch_balances()` re-reads until two consecutive reads
 agree; later calls that day (in the same process) read once.
 
