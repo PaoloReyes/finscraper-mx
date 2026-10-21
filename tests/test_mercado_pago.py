@@ -60,8 +60,8 @@ def provider(client=None, **overrides):
 
 
 @pytest.fixture(autouse=True)
-def fresh_day():
-    mercado_pago._settled_on.clear()  # every test starts as the day's first read
+def fresh_day(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))  # every test starts as the day's first read
 
 
 def test_requires_auth():
@@ -174,9 +174,28 @@ def test_later_reads_that_day_read_once():
     assert len(reads) == 4  # same day: a single read
 
 
-def test_a_new_day_reconciles_again():
+def test_settled_day_carries_over_to_a_new_run_without_the_session_id(tmp_path):
     client, reads = sequenced_app("12345.67")
-    mp = provider(client)
-    mercado_pago._settled_on[AUTH["session_id"]] = mercado_pago.date(2000, 1, 1)
-    mp.fetch_balances()
-    assert len(reads) == 2
+    provider(client).fetch_balances()
+    provider(client).fetch_balances()  # a fresh provider, as in the next CLI run
+    assert len(reads) == 3
+    state = (tmp_path / "finscraper-mx" / "mercado_pago.json").read_text()
+    assert AUTH["session_id"] not in state  # only a hash and a date are cached
+
+
+def test_a_new_day_reconciles_again(tmp_path):
+    state = tmp_path / "finscraper-mx" / "mercado_pago.json"
+    client, reads = sequenced_app("12345.67")
+    provider(client).fetch_balances()
+    state.write_text(state.read_text().replace(mercado_pago.datetime.now(mercado_pago.MEXICO_CITY).date().isoformat(), "2000-01-01"))
+    provider(client).fetch_balances()
+    assert len(reads) == 4
+
+
+def test_unwritable_cache_still_reconciles(tmp_path):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("")
+    client, reads = sequenced_app("12345.67")
+    provider(client, state_path=blocker / "state.json").fetch_balances()
+    provider(client, state_path=blocker / "state.json").fetch_balances()
+    assert len(reads) == 4

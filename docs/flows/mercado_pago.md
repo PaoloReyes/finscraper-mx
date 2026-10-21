@@ -9,9 +9,10 @@ section (Saldo, Apartados, Criptomonedas), in MXN.
 
 The first read of the day can return a stale snapshot, the same one the app paints before it
 refreshes. So the day's first `fetch_balances()` re-reads the home hub (1.5 s apart) until two consecutive
-reads report the same amounts, at most four reads, returning the latest if they never agree. The date it
-settled on is kept in memory per `session_id` (Mexico City time, never written to disk), so later calls
-that day in the same process read once, and a fresh process reconciles its first read again.
+reads report the same amounts, at most four reads, returning the latest if they never agree. The Mexico City
+date it settled on is cached in `$XDG_CACHE_HOME/finscraper-mx/mercado_pago.json` (default `~/.cache`,
+override with `state_path=`), keyed by a hash of the `session_id`, so later calls that day read once, even
+across runs. The file holds nothing secret; if it can't be read or written, every call reconciles.
 
 ## One-time setup (the user captures their own app session)
 
@@ -39,7 +40,7 @@ sequenceDiagram
 
   C->>P: get_provider("mercado_pago")(token, session_id, device_id)
   C->>P: fetch_balances()
-  Note over P: already settled today, in this process? then a single read, else loop
+  Note over P: cache file says settled today? then a single read, else loop
   loop until two consecutive reads agree - at most 4 reads, 1.5 s apart
     P->>S: GET /mp-home-hub/home  (Authorization Bearer, x-meli-session-id, x-device-id)
     alt token rejected
@@ -54,5 +55,6 @@ sequenceDiagram
     end
     Note over P: compare Saldo, Apartados, Criptomonedas with the previous read
   end
+  Note over P: write today to the cache file
   P-->>C: list of Balance - Saldo, Apartados, Criptomonedas - in MXN
 ```

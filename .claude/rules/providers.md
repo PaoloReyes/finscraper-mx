@@ -18,6 +18,8 @@ These are enforced by the compliance gate (`.claude/hooks/precommit_gate.py --ch
 ## Statelessness & secrets
 
 - The library **never persists** credentials or sessions. The caller supplies `auth` and stores it.
+  Non-secret, best-effort cache state is fine when a provider needs it (e.g. Mercado Pago's
+  "settled today" date in `~/.cache/finscraper-mx/`, keyed by a hash, never a raw id).
 - **Never commit secrets.** Account ids, tokens, passwords belong in local gitignored files
   (`*_config.json`, `*_tokens.json`, `*_values.json`, `auth*.json`, `.env`, `.har`). A fixed public app
   identifier is fine; nothing personal is hardcoded.
