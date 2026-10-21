@@ -5,7 +5,7 @@ Mercado Pago's developer API only covers payments, so this reads what the app's 
 `banking_andes` section has one tab per balance group (Saldo, Apartados, Criptomonedas), and each tab's
 `banking_balance_andes` item carries `money_amount_items` already valued in MXN. The first read of
 the day can be a stale snapshot, so the day's first `fetch_balances()` re-reads until two consecutive reads
-agree; later calls that day read once (the settled date is cached in `~/.cache/finscraper-mx/`).
+agree; later calls that day read once (the settled date is cached in the user cache folder).
 
 Signing in on the app needs a device-attestation token and a `face_validation` challenge that cannot be
 reproduced off-device, so the provider never logs in: the caller captures their own signed-in session
@@ -23,6 +23,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
+import tempfile
 import time
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -48,9 +50,10 @@ KINDS = {
 MAX_READS = 4
 SETTLE_SECONDS = 1.5
 MEXICO_CITY = timezone(timedelta(hours=-6))  # no DST since 2022; avoids needing tzdata
-# The Mexico City date each session last settled on is kept in a small cache file, so later runs that day
-# read once. It holds only a hash of the session id and a date (nothing secret); if it can't be read or
-# written, every call just reconciles.
+# The Mexico City date each device last settled on is kept in a small file in the OS's user cache folder,
+# so later runs that day read once. It is keyed by the device id (stable for the app install, unlike the
+# session id) and holds only its hash and a date (nothing secret); if it can't be read or written, every
+# call just reconciles.
 STATE_FILE = Path("finscraper-mx") / "mercado_pago.json"
 # Per-user ids the risk gateway may want in addition to the token; sent only when supplied.
 OPTIONAL_HEADERS = {
@@ -101,7 +104,7 @@ class MercadoPago(Provider):
 
     def fetch_balances(self) -> list[Balance]:
         today = datetime.now(MEXICO_CITY).date()
-        key = hashlib.sha256(self.auth["session_id"].encode()).hexdigest()[:16]
+        key = hashlib.sha256(self.auth["device_id"].encode()).hexdigest()[:16]
         if _load_state(self._state_path).get(key) == today.isoformat():
             return self._read()  # already reconciled today: one read is enough
         balances = self._settled_read()
@@ -159,7 +162,16 @@ class MercadoPago(Provider):
 
 
 def _default_state_path() -> Path:
-    cache = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    """The user cache folder on each OS, or the temp folder when there is no home directory."""
+    try:
+        if sys.platform == "win32":
+            cache = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
+        elif sys.platform == "darwin":
+            cache = Path.home() / "Library" / "Caches"
+        else:
+            cache = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    except RuntimeError:  # Path.home() with no resolvable home
+        cache = tempfile.gettempdir()
     return Path(cache) / STATE_FILE
 
 

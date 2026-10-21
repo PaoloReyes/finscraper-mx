@@ -61,7 +61,8 @@ def provider(client=None, **overrides):
 
 @pytest.fixture(autouse=True)
 def fresh_day(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))  # every test starts as the day's first read
+    # every test starts as the day's first read, with the cache in its own folder
+    monkeypatch.setattr(mercado_pago, "_default_state_path", lambda: tmp_path / "finscraper-mx" / "mercado_pago.json")
 
 
 def test_requires_auth():
@@ -174,13 +175,20 @@ def test_later_reads_that_day_read_once():
     assert len(reads) == 4  # same day: a single read
 
 
-def test_settled_day_carries_over_to_a_new_run_without_the_session_id(tmp_path):
+def test_settled_day_carries_over_to_a_new_run_without_the_device_id(tmp_path):
     client, reads = sequenced_app("12345.67")
     provider(client).fetch_balances()
     provider(client).fetch_balances()  # a fresh provider, as in the next CLI run
     assert len(reads) == 3
     state = (tmp_path / "finscraper-mx" / "mercado_pago.json").read_text()
-    assert AUTH["session_id"] not in state  # only a hash and a date are cached
+    assert AUTH["device_id"] not in state  # only a hash and a date are cached
+
+
+def test_a_new_session_on_the_same_device_stays_settled():
+    client, reads = sequenced_app("12345.67")
+    provider(client).fetch_balances()
+    provider(client, session_id="another-fake-session").fetch_balances()  # session rotated mid-day
+    assert len(reads) == 3
 
 
 def test_a_new_day_reconciles_again(tmp_path):

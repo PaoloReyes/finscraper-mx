@@ -10,9 +10,10 @@ section (Saldo, Apartados, Criptomonedas), in MXN.
 The first read of the day can return a stale snapshot, the same one the app paints before it
 refreshes. So the day's first `fetch_balances()` re-reads the home hub (1.5 s apart) until two consecutive
 reads report the same amounts, at most four reads, returning the latest if they never agree. The Mexico City
-date it settled on is cached in `$XDG_CACHE_HOME/finscraper-mx/mercado_pago.json` (default `~/.cache`,
-override with `state_path=`), keyed by a hash of the `session_id`, so later calls that day read once, even
-across runs. The file holds nothing secret; if it can't be read or written, every call reconciles.
+date it settled on is cached in `finscraper-mx/mercado_pago.json` under the user cache folder
+(`~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows, `$XDG_CACHE_HOME` or `~/.cache` elsewhere,
+the temp folder with no home; override with `state_path=`), keyed by a hash of the `device_id` (stable
+for the install, unlike the session id), so later calls that day read once, even across runs. The file holds nothing secret; if it can't be read or written, every call reconciles.
 
 ## One-time setup (the user captures their own app session)
 
