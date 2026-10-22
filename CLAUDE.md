@@ -32,6 +32,7 @@ flowchart TD
   reg --> klar["Klar México<br/>auth: private_key_pem + device_id + username + password<br/>device key captured from paired phone; per-request RSA MFA"]
   reg --> mp["Mercado Pago<br/>auth: token + session_id + device_id<br/>captured from the signed-in app"]
   reg --> mifel["Banco Mifel<br/>auth: username + password<br/>Keycloak password grant"]
+  reg --> ob["Openbank México<br/>auth: username + password + device_uuid<br/>Keycloak-style login + gp-exp global position"]
   reg --> plata["Plata<br/>auth: auth_request + installation_id<br/>capture Auth call from proxy; replayed to mint a session token"]
   reg --> skandia["Skandia México<br/>auth: username + password<br/>mobile app API"]
   bitso -->|"httpx"| bapi[("api.bitso.com")]
@@ -40,6 +41,7 @@ flowchart TD
   klar -->|"httpx"| kapi[("api.klar.mx (Keycloak login + MFA-gated reads)")]
   mp -->|"httpx"| mapi[("mobile.mercadopago.com/mp-home-hub/home")]
   mifel -->|"curl-cffi (login) + httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
+  ob -->|"httpx"| oapi[("api.openbank.mx (login + mb-api-gp-exp global position)")]
   plata -->|"httpx (HTTP/2 gRPC)"| papi[("prime.platacard.mx")]
   skandia -->|"httpx"| sapi[("mobile.skandia.com.mx")]
   bitso -->|"fetch_balances()"| bal["list of Balance<br/>valued in MXN"]
@@ -48,6 +50,7 @@ flowchart TD
   klar -->|"fetch_balances()"| bal
   mp -->|"fetch_balances()"| bal
   mifel -->|"fetch_balances()"| bal
+  ob -->|"fetch_balances()"| bal
   plata -->|"fetch_balances()"| bal
   skandia -->|"fetch_balances()"| bal
 ```
@@ -60,6 +63,7 @@ flowchart TD
 | `klar` | `private_key_pem`, `device_id`, `username`, `password` (device key + trusted-device id captured from the paired phone) | Cuenta, Ahorro, Depósito en garantía, in MXN (credit excluded) | Keycloak 2-step login + per-request RSA MFA on api.klar.mx |
 | `mercado_pago` | `token`, `session_id`, `device_id` (captured app session) | per balance tab, in MXN | mobile home-hub API |
 | `mifel` | `username`, `password` | account balances, in MXN | Keycloak + integracion API |
+| `openbank` | `username`, `password`, `device_uuid` | accounts (checking/savings/investment), in MXN (credit excluded) | Openbank MX app API (`api.openbank.mx`): login + `mb-api-gp-exp` global position |
 | `plata` | `auth_request`, `installation_id` (capture the Auth call from proxy; replayed to mint a session token) | accounts + investment, in MXN (Acciones via Google FX) | mobile app gRPC API |
 | `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SKANDIA NET MX mobile app API |
 
@@ -69,6 +73,7 @@ Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) �
 [`docs/flows/klar.md`](docs/flows/klar.md) ·
 [`docs/flows/mercado_pago.md`](docs/flows/mercado_pago.md) ·
 [`docs/flows/mifel.md`](docs/flows/mifel.md) ·
+[`docs/flows/openbank.md`](docs/flows/openbank.md) ·
 [`docs/flows/nu.md`](docs/flows/nu.md) ·
 [`docs/flows/plata.md`](docs/flows/plata.md) ·
 [`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).

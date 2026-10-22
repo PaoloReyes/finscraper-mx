@@ -16,6 +16,7 @@ PROVIDERS: dict[str, tuple[str, str]] = {
     "klar": ("finscraper_mx.institutions.klar", "Klar"),
     "mercado_pago": ("finscraper_mx.institutions.mercado_pago", "MercadoPago"),
     "mifel": ("finscraper_mx.institutions.mifel", "Mifel"),
+    "openbank": ("finscraper_mx.institutions.openbank", "Openbank"),
     "plata": ("finscraper_mx.institutions.plata", "Plata"),
     "skandia": ("finscraper_mx.institutions.skandia", "Skandia"),
 }
