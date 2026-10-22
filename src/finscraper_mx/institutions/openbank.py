@@ -13,6 +13,10 @@ device_uuid
     The app's registered device UUID. Openbank binds a trusted device at onboarding;
     the same UUID is sent both as ``deviceInformation.deviceUUID`` in the body and as
     ``platforminformation.uuid`` in the header. Capture it once from the app/proxy.
+proxy (optional)
+    Openbank's AWS load balancer rejects datacenter IPs (a cloud server gets a ``403`` on
+    login). A proxy URL (e.g. ``http://warp:1080``) routes this provider's calls, and only
+    these, through a residential or WARP connection.
 
 Status
 ------
@@ -98,7 +102,7 @@ class Openbank(Provider):
         self._product_version = product_version
         self._os_version = os_version
         self._location = location
-        self._client = client or httpx.Client(timeout=30)
+        self._client = client or httpx.Client(timeout=30, proxy=self.auth.get("proxy") or None)
 
     def fetch_balances(self) -> list[Balance]:
         token = self._login()
@@ -247,7 +251,10 @@ class Openbank(Provider):
         }
         resp = self._client.post(LOGIN_URL, headers=headers, content=json.dumps(body))
         if resp.status_code in (401, 403):
-            raise SessionExpired(f"openbank: login rejected ({resp.status_code}) — check credentials/device")
+            raise SessionExpired(
+                f"openbank: login rejected ({resp.status_code}, {resp.headers.get('content-type') or 'no content-type'})"
+                " — check credentials/device, or set `proxy` if this runs on a datacenter IP"
+            )
         if resp.status_code >= 400:
             raise SessionExpired(f"openbank: login failed with HTTP {resp.status_code}")
         try:
