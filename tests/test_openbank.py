@@ -138,6 +138,12 @@ def test_login_rejected_raises_session_expired():
         _provider(_client(_resp(401, {"error": "bad creds"})))._login()
 
 
+def test_optional_proxy_routes_the_client():
+    proxied = get_provider("openbank")(username=FAKE_USER, password=FAKE_PASS, device_uuid=FAKE_DEVICE,
+                                       proxy="http://127.0.0.1:8899")
+    assert any(str(t._pool._proxy_url.origin) == "http://127.0.0.1:8899" for t in proxied._client._mounts.values())
+
+
 def test_login_without_token_raises_auth_required():
     with pytest.raises(AuthRequired):
         _provider(_client(_resp(200, {"someOtherField": 1})))._login()

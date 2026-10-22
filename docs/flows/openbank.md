@@ -27,6 +27,10 @@ in a **custom `accesstoken:` header — not `Authorization: Bearer`** — plus `
 and a `platforminformation` JSON header. No per-request device-nonce signing was observed on
 the login or customer-summary calls.
 
+Openbank's AWS load balancer rejects datacenter IPs: from a cloud server the login gets a `403`
+whatever the credentials. Pass the optional `proxy` auth value (`http://host:port`, e.g. a Cloudflare
+WARP proxy) to send this provider's calls, and only these, through another connection.
+
 Attestation present in the app (Play Integrity, ThreatMetrix) is **telemetry only** — not a
 client-side hard gate — so headless login works without it.
 

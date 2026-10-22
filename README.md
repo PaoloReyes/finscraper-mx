@@ -16,7 +16,7 @@ Unofficial, **read-only** balance scrapers for Mexican financial institutions: b
 | `klar` | Klar México | ✅ Cuenta, Ahorro, Depósito en garantía in MXN (credit excluded) | device RSA key + trusted-device id captured from the paired phone, plus `username` + `password` (`private_key_pem`, `device_id`, `username`, `password`) |
 | `mercado_pago` | Mercado Pago | ✅ Saldo, Apartados, Cripto in MXN | mobile-app session (`token`, `session_id`, `device_id`) |
 | `mifel` | Banco Mifel | ✅ account balances in MXN | online-banking `username` + `password` |
-| `openbank` | Openbank México | ✅ accounts (checking/savings/investment) in MXN (credit excluded) | `username` + `password` + `device_uuid` (registered device id) |
+| `openbank` | Openbank México | ✅ accounts (checking/savings/investment) in MXN (credit excluded) | `username` + `password` + `device_uuid` (registered device id), optional `proxy` (datacenter IPs are blocked) |
 | `plata` | Plata | ✅ accounts + investment in MXN (incl. Plata Acciones) | `auth_request` + `installation_id` (capture the app's Auth call from a proxy; replayed to mint a session token) |
 | `skandia` | Skandia México | ✅ Fondo de Ahorro in MXN | CURP + 6-digit PIN (`username`, `password`) |
 
