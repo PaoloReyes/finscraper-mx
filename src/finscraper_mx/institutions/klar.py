@@ -31,7 +31,6 @@ capture the device key and id from your phone.
 from __future__ import annotations
 
 import base64
-import json
 import uuid
 from decimal import Decimal
 

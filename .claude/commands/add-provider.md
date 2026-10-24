@@ -1,5 +1,5 @@
 ---
-description: Add a new finscraper-mx provider end to end (module, registry, test, README, CLAUDE.md diagram, flow doc, gate).
+description: Add a new finscraper-mx provider end to end (module, registry, test, README, CLAUDE.md diagram, flow doc, credential guide, gate).
 argument-hint: <institution name or id>
 ---
 

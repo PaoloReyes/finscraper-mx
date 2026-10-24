@@ -38,9 +38,9 @@ flowchart TD
   bitso -->|"httpx"| bapi[("api.bitso.com")]
   didi -->|"httpx"| dapi[("wallet.didipay.com/sofipo")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
-  klar -->|"httpx"| kapi[("api.klar.mx (Keycloak login + MFA-gated reads)")]
+  klar -->|"httpx + cryptography"| kapi[("api.klar.mx (Keycloak login + MFA-gated reads)")]
   mp -->|"httpx"| mapi[("mobile.mercadopago.com/mp-home-hub/home")]
-  mifel -->|"curl-cffi (login) + httpx"| mapi[("sso.mifel.net · integracion.mifel.com.mx")]
+  mifel -->|"curl-cffi (login) + httpx"| mifapi[("sso.mifel.net · integracion.mifel.com.mx")]
   ob -->|"httpx"| oapi[("api.openbank.mx (login + mb-api-gp-exp global position)")]
   plata -->|"httpx (HTTP/2 gRPC)"| papi[("prime.platacard.mx")]
   skandia -->|"httpx"| sapi[("mobile.skandia.com.mx")]
@@ -74,20 +74,23 @@ Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) �
 [`docs/flows/mercado_pago.md`](docs/flows/mercado_pago.md) ·
 [`docs/flows/mifel.md`](docs/flows/mifel.md) ·
 [`docs/flows/openbank.md`](docs/flows/openbank.md) ·
-[`docs/flows/nu.md`](docs/flows/nu.md) ·
 [`docs/flows/plata.md`](docs/flows/plata.md) ·
 [`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).
+
+How a user obtains each provider's auth fields (what to capture, example `auth_<id>.json`, lifetime):
+[`docs/credentials.md`](docs/credentials.md). Edenred is **not** a provider yet (blocked on certificate pinning).
 
 ## Rules
 
 Full list in [`.claude/rules/providers.md`](.claude/rules/providers.md). In short:
 
 - **Standard interface only** — `get_provider(id)(**auth).fetch_balances()`; no bespoke public read methods.
-- **Stateless** — the library never persists credentials or sessions; the caller passes auth in.
+- **Stateless** — the library never persists credentials or sessions; the caller passes auth in (non-secret
+  cache state, like Mercado Pago's settled-today date, is allowed).
 - **No secrets in the repo** — account ids, tokens and passwords live only in local gitignored files
-  (`*_config.json`, `*_tokens.json`, `*_values.json`, `auth*.json`, `.env`, `.har`). A fixed public app id
+  (`auth_<id>.json`, `*_auth.json`, `*_config.json`, `*_tokens.json`, `*_values.json`, `.env`, `.har`). A fixed public app id
   (e.g. GBM's `CLIENT_ID`) is fine; nothing personal is hardcoded.
-- **Runtime dependencies declared in `pyproject.toml`** (`httpx`, `curl-cffi`). **Money is `Decimal`**, never float.
+- **Runtime dependencies declared in `pyproject.toml`** (`httpx[http2]`, `curl-cffi` for Mifel, `cryptography` for Klar). **Money is `Decimal`**, never float.
 
 ## Layout
 
@@ -96,9 +99,11 @@ src/finscraper_mx/
   core.py                   Provider, Balance, AccountKind, errors
   institutions/__init__.py  PROVIDERS registry {id: (module, class)} + get_provider()
   institutions/<id>.py      one provider per institution (bitso, gbm, …)
-  cli.py                    finscraper-mx list / balances <id> --auth auth.json
+  cli.py                    finscraper-mx list / balances <id> --auth auth_<id>.json
 tests/test_<id>.py          one test file per provider (mocked httpx, fake data)
-docs/flows/<id>.py          detailed mermaid call-flow per provider
+docs/flows/<id>.md          detailed mermaid call-flow per provider
+docs/credentials.md         how to obtain every provider's auth fields
+scripts/klar_capture.py     mitmproxy helper for capturing Klar's device key + id
 .claude/                    rules · skills · commands · agents · hooks · settings.json
 ```
 
@@ -124,6 +129,7 @@ docs/flows/<id>.py          detailed mermaid call-flow per provider
   ```bash
   .venv/bin/python .claude/hooks/precommit_gate.py --check
   ```
-  It checks provider compliance, per-provider tests, README + architecture diagram + flow docs in sync,
+  It checks provider compliance, per-provider tests, README + architecture diagram + flow docs + credential
+  guide in sync,
   no tracked secrets, and a green suite.
 - **Dev setup:** `python -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest`

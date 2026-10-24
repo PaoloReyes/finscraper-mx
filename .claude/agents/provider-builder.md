@@ -15,8 +15,8 @@ Hard rules:
   read methods or document direct-import usage.
 - Stateless: the caller supplies and stores credentials. Never hardcode or commit secrets; tests use fake
   data only.
-- For each provider keep all six in sync: module, registry entry, `tests/test_<id>.py`, README row,
-  `CLAUDE.md` architecture diagram, and `docs/flows/<id>.md`.
+- For each provider keep all seven in sync: module, registry entry, `tests/test_<id>.py`, README row,
+  `CLAUDE.md` architecture diagram, `docs/flows/<id>.md`, and its section in `docs/credentials.md`.
 
 Finish every task by running the gate and fixing everything until it reports `COMPLIANCE OK`:
 

@@ -1,7 +1,7 @@
 """Command line for trying providers by hand.
 
     finscraper-mx list
-    finscraper-mx balances <institution> --auth auth.json
+    finscraper-mx balances <institution> --auth auth_<institution>.json
 
 Credentials are read from a JSON file (never from arguments, which end up in shell history).
 """

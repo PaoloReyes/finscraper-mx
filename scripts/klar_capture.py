@@ -17,7 +17,7 @@ Prerequisite: `pip install mitmproxy`. Run it on a laptop the phone can reach on
 router isolates clients, use a phone/laptop hotspot). Full walkthrough: docs/flows/klar.md.
 
 Legal/safety: use only with your own Klar account. The key + credentials grant full account access — keep
-auth.json private and never commit it.
+auth_klar.json private and never commit it.
 
 The capture reusable pattern (flip a non-pinned Remote Config flag to unlock an in-app inspector, read the
 device id off an un-pinned auth call) applies to other capture-based providers too; klar is the first.
@@ -44,7 +44,7 @@ try:  # only importable inside mitmproxy; the __main__ runner below does not nee
         try:
             obj = json.loads(text)
             if isinstance(obj, dict) and obj.get("deviceId"):
-                ctx.log.alert(f"[klar] >>> deviceId = {obj['deviceId']}   (copy this into auth.json)")
+                ctx.log.alert(f"[klar] >>> deviceId = {obj['deviceId']}   (copy this into auth_klar.json)")
                 return
         except ValueError:
             pass
@@ -119,7 +119,7 @@ On the phone (same Wi-Fi):
      Copy the  -----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY-----  block  ->  private_key_pem
   5. Watch this terminal for:   [klar] >>> deviceId = <uuid>     ->  device_id
 
-Then save auth.json (keep it private, never commit):
+Then save auth_klar.json (keep it private, never commit):
   {{"private_key_pem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n",
    "device_id": "<uuid>", "username": "you@example.mx", "password": "..."}}
 

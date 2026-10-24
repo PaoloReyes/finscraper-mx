@@ -35,6 +35,9 @@ Read `CLAUDE.md` first. Every provider is used the same way — `get_provider(id
 6. **Add `docs/flows/<id>.md`** — a detailed mermaid flow of the provider's auth + read calls (see the
    existing `docs/flows/bitso.md` / `docs/flows/gbm.md`).
 
+   Then add a section to **`docs/credentials.md`**: what each auth field is and how the user obtains it,
+   an example `auth_<id>.json` with placeholder values only, and how long it lasts / when to re-capture.
+
 7. **Dependencies.** If it needs a new runtime package, add it to `dependencies` in `pyproject.toml`
    (`httpx` is already there).
 

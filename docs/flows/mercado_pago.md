@@ -1,5 +1,7 @@
 # Mercado Pago — flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#mercado_pago).
+
 Auth: the signed-in mobile app's credentials, captured by the user (e.g. with mitmproxy). The required
 ones are the `Authorization: Bearer APP_USR-…` `token`, the MeLi `session_id` and the `device_id`;
 `client_info`, `d2id`, `device_fsid` and `frontend_session_id` are optional fall-backs. App login needs
@@ -28,7 +30,7 @@ sequenceDiagram
   A->>S: GET /mp-home-hub/home  (Bearer token + session and device ids)
   S-->>A: home hub JSON
   U->>M: read the request headers from the capture
-  Note over U: store token, session_id, device_id in a local auth.json - full account access, keep it private
+  Note over U: store token, session_id, device_id in a local auth_mercado_pago.json - full account access, keep it private
 ```
 
 ## Each read — `fetch_balances()`

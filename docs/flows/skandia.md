@@ -1,5 +1,7 @@
 # Skandia México — call flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#skandia).
+
 Provider id: `skandia`  
 API: `mobile.skandia.com.mx` (SKANDIA NET MX mobile app backend)
 
@@ -7,7 +9,7 @@ API: `mobile.skandia.com.mx` (SKANDIA NET MX mobile app backend)
 
 `username` (CURP, 18 characters) + `password` (6-digit numeric PIN) — same credentials as the web portal and mobile app.
 
-No captcha, no OTP, no tesseract required.
+No captcha or OTP: the app API takes the CURP and PIN directly.
 
 ## Flow
 

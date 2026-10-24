@@ -1,5 +1,7 @@
 # Klar — flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#klar).
+
 Auth: the device RSA keypair + its trusted-device id, captured once from the user's own **paired phone**,
 plus the account `username` + `password`. Klar gates every data call with a per-request RSA
 challenge-response bound to a trusted device, and pairing a *new* device is KYC-gated (face scan + SMS),
@@ -39,7 +41,7 @@ sequenceDiagram
   Ph-->>U: shows the device private key (copy it -> private_key_pem)
   Ph->>GW: POST /api/v2/auth/refreshToken {token, deviceId}
   M-->>U: prints deviceId from the gw body
-  Note over U: save {private_key_pem, device_id, username, password} in a local auth.json - keep it private
+  Note over U: save {private_key_pem, device_id, username, password} in a local auth_klar.json - keep it private
 ```
 
 ## Each read — `fetch_balances()`
@@ -91,7 +93,7 @@ python scripts/klar_capture.py          # prints the laptop IP + exact phone ste
 4. Watch the `klar_capture.py` terminal for `>>> deviceId = <uuid>` (printed from a `gw.klar.mx` refresh).
    If gw turns out to be pinned, it won't appear — instead export the app's logs (file logging was flagged
    on) and read the `mfa-accept: TRUSTED_DEVICE:<uuid>` line.
-5. Save all four fields in a local, gitignored `auth.json`:
+5. Save all four fields in a local, gitignored `auth_klar.json`:
    ```json
    {"private_key_pem": "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----\n",
     "device_id": "…", "username": "you@example.mx", "password": "…"}

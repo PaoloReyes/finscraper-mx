@@ -1,5 +1,7 @@
 # Bitso — flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#bitso).
+
 Auth: a read-only API key (`api_key`, `api_secret`). Reads one `Balance` per non-zero asset, valued in
 MXN (bridging through USD/USDT/BTC when an asset has no direct MXN market).
 

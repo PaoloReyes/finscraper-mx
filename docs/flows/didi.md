@@ -1,5 +1,7 @@
 # DiDi — flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#didi).
+
 Auth: the signed-in mobile app's request, captured by the user (e.g. with mitmproxy). The app signs
 every request with a per-request `wsgsig`/`secdd` signature computed natively over the exact query
 string and body; it can't be reproduced off-device and only validates the request it was made for, so
@@ -23,7 +25,7 @@ sequenceDiagram
   A->>S: POST /sofipo/uchome/v0/main (sofi-header-hint-content token + wsgsig/secdd over this exact query+body)
   S-->>A: SoFiPo home JSON
   U->>M: read the request from the capture
-  Note over U: store token, signed_query, wsgsig and secdd/oid/rid in a local auth.json - keep it private
+  Note over U: store token, signed_query, wsgsig and secdd/oid/rid in a local auth_didi.json - keep it private
 ```
 
 ## Each read — `fetch_balances()`

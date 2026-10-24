@@ -1,20 +1,19 @@
 # Openbank México — call flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#openbank).
+
 Provider id: `openbank`
 API: `api.openbank.mx` (Grupo Santander "modelbank" / Openbank MX app backend)
 
-## Status
-
-**Implemented and verified** against a decrypted capture of the Openbank MX app
-(`mx.openbank.modelbank` v1.19.1): login handshake + the global-position balance read.
+Verified against a decrypted capture of the Openbank MX app (`mx.openbank.modelbank` v1.19.1).
 
 ## Auth
 
 `username` + `password` + `device_uuid`.
 
 - `username` is the login identifier (email by default; `document_type` can select others).
-- `device_uuid` is the app's **registered trusted-device UUID**, captured once from the app
-  or a proxy. It is sent both as `deviceInformation.deviceUUID` in the body and as
+- `device_uuid` is the app's **registered trusted-device UUID**, captured once from the Android app
+  (see `docs/credentials.md`). It is sent both as `deviceInformation.deviceUUID` in the body and as
   `platforminformation.uuid` in the header — they are the same value.
 
 Login is a 3-call handshake on one cookie-carrying client: `GET captcha-flag` (seeds the

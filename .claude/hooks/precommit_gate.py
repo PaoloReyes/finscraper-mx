@@ -10,8 +10,8 @@ Two modes, one file:
   Manual: `.venv/bin/python .claude/hooks/precommit_gate.py --check` runs the gate directly and prints
   the report. The provider-builder agent and anyone else can use this.
 
-The gate checks: provider standard interface, per-provider tests, README / CLAUDE.md diagram / flow docs in
-sync, no tracked secrets, and a green test suite.
+The gate checks: provider standard interface, per-provider tests, README / CLAUDE.md diagram / flow docs /
+credential guide in sync, no tracked secrets, and a green test suite.
 """
 from __future__ import annotations
 
@@ -90,9 +90,15 @@ def run_gate() -> int:
         has_diagram = flow.exists() and "```mermaid" in flow.read_text(encoding="utf-8")
         check(has_diagram, f"{pid}: has docs/flows/{pid}.md with a mermaid diagram")
 
+    section("credential guide (docs/credentials.md)")
+    creds = root / "docs" / "credentials.md"
+    guide = creds.read_text(encoding="utf-8") if creds.exists() else ""
+    for pid in PROVIDERS:
+        check(f"`{pid}`" in guide, f"{pid}: has a section in docs/credentials.md")
+
     section("no secrets tracked")
     tracked = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.split()
-    bad = [f for f in tracked if re.search(r"(_tokens|_config|_values)\.json$|(^|/)auth.*\.json$|\.env$|\.har$", f)]
+    bad = [f for f in tracked if re.search(r"(_tokens|_config|_values|_auth)\.json$|(^|/)auth.*\.json$|\.env$|\.har$", f)]
     check(not bad, "no credential/session files tracked" + (f" (found: {', '.join(bad)})" if bad else ""))
 
     section("tests pass")

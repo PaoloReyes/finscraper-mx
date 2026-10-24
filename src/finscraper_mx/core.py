@@ -22,8 +22,8 @@ class AccountKind(StrEnum):
 class Balance:
     """One account's balance as reported by the institution at `as_of`."""
 
-    institution: str  # Provider.id, e.g. "bbva_mx"
-    account: str      # institution's own label or masked number, e.g. "Libretón *1234"
+    institution: str  # Provider.id, e.g. "mercado_pago"
+    account: str      # institution's own label or masked number, e.g. "Cuenta *1234"
     kind: AccountKind
     amount: Decimal
     currency: str = "MXN"
@@ -59,12 +59,13 @@ class LayoutChanged(FinscraperError):
 class Provider(ABC):
     """Reads balances from one institution.
 
-    Providers are read-only and never persist anything: the caller supplies credentials or session
-    values (`auth_fields`) and decides where, if anywhere, they are stored.
+    Providers are read-only and never persist credentials or sessions: the caller supplies them
+    (`auth_fields`) and decides where, if anywhere, they are stored. A provider may keep non-secret,
+    best-effort cache state (e.g. Mercado Pago's settled-today date).
     """
 
-    id: ClassVar[str]                     # stable snake_case key, e.g. "bbva_mx"
-    name: ClassVar[str]                   # display name, e.g. "BBVA México"
+    id: ClassVar[str]                     # stable snake_case key, e.g. "mercado_pago"
+    name: ClassVar[str]                   # display name, e.g. "Mercado Pago"
     auth_fields: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, **auth: str) -> None:

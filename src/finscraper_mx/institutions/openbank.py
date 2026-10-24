@@ -12,22 +12,19 @@ password
 device_uuid
     The app's registered device UUID. Openbank binds a trusted device at onboarding;
     the same UUID is sent both as ``deviceInformation.deviceUUID`` in the body and as
-    ``platforminformation.uuid`` in the header. Capture it once from the app/proxy.
+    ``platforminformation.uuid`` in the header. Captured once from the Android app (see
+    ``docs/credentials.md``).
 proxy (optional)
     Openbank's AWS load balancer rejects datacenter IPs (a cloud server gets a ``403`` on
     login). A proxy URL (e.g. ``http://warp:1080``) routes this provider's calls, and only
     these, through a residential or WARP connection.
 
-Status
-------
-**Fully implemented and verified** against a decrypted capture. ``POST
-/mb-api-auth/authentication/login`` returns an ``accessToken`` carried on every protected
-call as a custom ``accesstoken:`` header (not ``Authorization: Bearer``). The global
-position (``GET /mb-api-gp-exp/v7/summary`` then ``GET /mb-api-gp-exp/v6/categories/{id}``
-per category) is served through a Cronet (chromium) transport that pins independently of the
-OkHttp stack; decrypting it required a patched app (see ``docs/flows/openbank.md``).
-``fetch_balances()`` logs in, reads the global position, and releases the session on the way
-out.
+How it works
+------------
+``fetch_balances()`` logs in (``POST /mb-api-auth/authentication/login``; the token travels in a
+custom ``accesstoken:`` header, not ``Authorization: Bearer``), reads the global position
+(``GET /mb-api-gp-exp/v7/summary`` then ``GET /mb-api-gp-exp/v6/categories/{id}`` per category),
+and logs out on the way out. See ``docs/flows/openbank.md``.
 
 Not affiliated with Openbank / Grupo Santander. Automated access may be against Openbank's
 terms of use; use only with your own account.
@@ -47,7 +44,6 @@ CAPTCHA_FLAG_URL = f"{BASE}/mb-api-auth/authentication/captcha-flag"
 PASSWORD_POSITIONS_URL = f"{BASE}/mb-api-auth/authentication/users/password-positions"
 LOGIN_URL = f"{BASE}/mb-api-auth/authentication/login"
 LOGOUT_URL = f"{BASE}/mb-api-auth/authentication/logout"
-REFRESH_URL = f"{BASE}/mb-api-auth/authentication/refresh-token"
 
 # Global-position / balance endpoints (verified against a decrypted capture).
 SUMMARY_URL = f"{BASE}/mb-api-gp-exp/v7/summary"  # ?screenName=GP_SUMMARY -> {summaries, categories[]}

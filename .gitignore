@@ -8,6 +8,7 @@ build/
 
 # Credentials, sessions and raw captures: never commit these
 auth*.json
+*_auth.json
 .env
 *.har
 captures/

@@ -1,5 +1,7 @@
 # Plata — flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#plata).
+
 Auth: a captured **Auth request** (`auth_request`, base64 of the raw gRPC request body) plus the
 `installation_id` header, both grabbed once from a mitmproxy session. Plata's backend is
 gRPC-over-HTTP/2 on `prime.platacard.mx` (behind Cloudflare; no cert pinning on the backend). The login
@@ -32,7 +34,7 @@ fresh tokens.
 The blob is **long-lived** — a captured request was still minting fresh session tokens ~10 hours after
 capture (exact lifetime unknown). It is invalidated when Plata rotates the device key (logout, reinstall,
 new phone); when that happens the `Auth` call comes back empty and the provider raises
-:exc:`SessionExpired` with a "recapture auth_request" hint, so you recapture the Auth call and regenerate
+`SessionExpired` with a "recapture auth_request" hint, so you recapture the Auth call and regenerate
 `auth_plata.json`. The error message names which call was rejected (`Auth`, `GetAccounts`, or the invest
 widget).
 
@@ -45,8 +47,8 @@ widget).
    its **raw request body** → base64 → `auth_request`; and its **`x-plata-installation-id`** header →
    `installation_id`. Drop both into `auth_plata.json`.
 
-> A copy-paste helper script / step-by-step with exact mitmproxy commands will be added here (Paolo to
-> provide). The three steps above are the whole shape of it.
+Step by step, including a snippet that builds `auth_plata.json` from a saved mitmproxy capture:
+[`docs/credentials.md`](../credentials.md#plata).
 
 ## One-time setup — capture with mitmproxy
 

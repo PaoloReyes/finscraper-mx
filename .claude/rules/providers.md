@@ -21,16 +21,18 @@ These are enforced by the compliance gate (`.claude/hooks/precommit_gate.py --ch
   Non-secret, best-effort cache state is fine when a provider needs it (e.g. Mercado Pago's
   "settled today" date in the user cache folder, keyed by a hash, never a raw id).
 - **Never commit secrets.** Account ids, tokens, passwords belong in local gitignored files
-  (`*_config.json`, `*_tokens.json`, `*_values.json`, `auth*.json`, `.env`, `.har`). A fixed public app
+  (`auth_<id>.json` / `auth*.json`, `*_auth.json`, `*_config.json`, `*_tokens.json`, `*_values.json`, `.env`, `.har`). A fixed public app
   identifier is fine; nothing personal is hardcoded.
 
 ## Dependencies
 
-- Runtime dependencies are declared in `pyproject.toml` (`dependencies`): `httpx` for every provider (with
-  the `http2` extra, which Plata's gRPC API needs; see `docs/flows/plata.md`), plus
-  `curl-cffi` for Mifel's login (it impersonates
-  an iOS TLS fingerprint to pass Mifel's WAF; see `docs/flows/mifel.md`). Add a new one only when a provider
-  can't work without it. No per-provider extras, no import guards: import dependencies directly.
+- Runtime dependencies are declared in `pyproject.toml` (`dependencies`):
+  - `httpx[http2]` for every provider (the `http2` extra is for Plata's gRPC API; see `docs/flows/plata.md`);
+  - `curl-cffi` for Mifel's login (it impersonates an iOS TLS fingerprint to pass Mifel's WAF; see
+    `docs/flows/mifel.md`);
+  - `cryptography` for Klar (it answers each RSA MFA challenge with the device key; see `docs/flows/klar.md`).
+- Add a new one only when a provider can't work without it. No per-provider extras, no import guards:
+  import dependencies directly.
 
 ## Keep these in sync (the gate checks all of them)
 
@@ -41,6 +43,8 @@ For every provider `<id>`:
 4. A row in the README supported-institutions table.
 5. Shown in the `CLAUDE.md` architecture diagram (and its providers table).
 6. `docs/flows/<id>.md` — a detailed mermaid call-flow (auth + reads).
+7. A section in `docs/credentials.md` — how to obtain each auth field, an example `auth_<id>.json` with
+   **placeholders only**, and how long it lasts / when to re-capture.
 
 ## Mermaid
 

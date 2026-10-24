@@ -1,5 +1,7 @@
 # GBM+ — flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#gbm).
+
 Auth: a `refresh_token`, minted once by `Gbm.login(user, password, code)` (OAuth2 PKCE + TOTP MFA).
 Afterwards reads are silent (refresh only) until the token expires, then log in again. Reads one
 `Balance` per active strategy across every contract, valued in MXN.

@@ -1,5 +1,7 @@
 # Mifel (Banco Mifel) — call flow
 
+Getting the credentials: [`docs/credentials.md`](../credentials.md#mifel).
+
 Provider id: `mifel`  
 API: `sso.mifel.net` (Keycloak) + `integracion.mifel.com.mx`
 
@@ -29,22 +31,24 @@ sequenceDiagram
     KC-->>P: 200 deviceAllowedToLogin=true
     P->>I: POST /consultas/cuentas-vinculadas-v2  Authorization: Bearer access_token
     I-->>P: [{numCta descripcionSchemeCode moneda montoDisponible montoRetenidoCaja ...}]
-    loop per account
+    loop per account with montoRetenidoCaja above zero
         P->>I: GET /consultas/detalle-cuenta-vinculada/{numCta}
         I-->>P: [{saldoCajas descripcionTipoProducto ...}]
     end
-    P->>P: map to list[Balance(SAVINGS)]
+    P->>P: map each account to CHECKING, plus its Caja to SAVINGS when above zero
     P-->>C: list[Balance]
 ```
 
 ## Balance mapping
 
-| Source field | Used for |
-|---|---|
-| `detalle.saldoCajas` | Primary balance (investment/savings bucket) → `AccountKind.SAVINGS` |
-| `cuentas.montoDisponible` | Fallback if detail call fails → `AccountKind.CHECKING` |
-| `cuentas.descripcionSchemeCode` | Account label (e.g. "Digital Evoluciona") |
-| `cuentas.moneda` | Currency (always `"MXN"`) |
+Each linked account yields one or two balances:
+
+| Balance | Kind | Amount | Label |
+|---|---|---|---|
+| the account | `CHECKING` | `cuentas.montoDisponible` (available now) | `descripcionSchemeCode` (e.g. "Digital Evoluciona") |
+| its Caja, only when `montoRetenidoCaja` > 0 | `SAVINGS` | `detalle.saldoCajas` (falls back to `montoRetenidoCaja` if the detail call has none) | label + " (Caja)" |
+
+Currency comes from `cuentas.moneda` (MXN).
 
 ## Error handling
 
@@ -64,4 +68,4 @@ sequenceDiagram
 - `fingerprint` in the token request is a deterministic SHA-256 derived from the username.
   The server accepts any consistent value.
 - `latitude`/`longitude` default to Mexico City. Override with `location=(lat, lon)`.
-- The HAR capture (`mifel_app.har`) is gitignored; never commit it.
+- Any capture (`*.har`) is gitignored; never commit one.
