@@ -54,7 +54,7 @@ institution rejected the username or password.
 
 ## Capturing app traffic with mitmproxy
 
-Five providers (DiDi, Mercado Pago, Plata, Klar, and Openbank's device id) need values that only the
+Four providers (DiDi, Mercado Pago, Plata, and Openbank's device id) need values that only the
 institution's mobile app ever sends: the app signs or attests its login on the phone, so the library can't
 log in by itself. Instead you capture what your own app sends once, and the provider replays it.
 
@@ -64,6 +64,8 @@ captures each provider was built from; app versions drift, so letting Claude rea
 `capture-credentials` skill in this repo) is more reliable than copying values by hand.
 
 Use this only with your own accounts. A dump holds live sessions, so treat it like a password.
+
+Klar is different (its app pins its certificates): see [its section](#klar).
 
 ### 1. Start mitmproxy on your laptop and save everything
 
@@ -217,15 +219,27 @@ them. In Python, `location=(lat, lon)` sets the device location GBM's API expect
 Klar answers every request with an RSA challenge that only a paired ("trusted") device can solve, and
 pairing a new device needs a face scan and SMS. So the provider reuses your phone's existing device key.
 
-1. **`device_id`:** capture the Klar app signing in ([above](#capturing-app-traffic-with-mitmproxy)) and ask Claude to find
-   it. It's the UUID in the `mfa-accept: TRUSTED_DEVICE:<uuid>` header (or a `deviceId` field in a
-   `gw.klar.mx` auth call).
-2. **`private_key_pem`:** the phone's device key, shown on Klar's hidden **MFA → Inspect MFA keys**
-   developer screen. That screen only appears when Klar's Firebase Remote Config turns on
-   `instrumentation_enabled`, which has to be flipped in the proxied Remote Config response, and the app
-   reinstalled so it re-fetches the config. This step is still being re-tested; ask Claude to help with it.
-   Copy the whole `-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----` block.
-3. `username` and `password` are your Klar login.
+Klar **pins its certificates** for its own hosts, so a normal capture doesn't work: the app refuses the
+proxy. What *isn't* pinned is Firebase Remote Config, and Klar has a hidden developer menu switched on by a
+Remote Config flag. So the proxy is used for one thing only: flipping that flag the first time the app
+opens.
+
+1. **Start a Klar-only mitmproxy addon** on the laptop. It isn't shipped in the repo; ask Claude
+   ("reconstruct the Klar Remote Config addon", the `capture-credentials` skill has the spec). It
+   intercepts **only** `firebaseremoteconfig.googleapis.com`, so every pinned Klar host passes through
+   the proxy untouched and the app keeps working, and it sets `instrumentation_enabled` and
+   `file_logging_enabled` to `true` in the Remote Config response.
+2. Point the phone at the proxy and trust its certificate (steps above).
+3. **Reinstall Klar, open it and sign in with the proxy on.** Remote Config is only fully fetched on the
+   first launch after an install, so the flags only stick this way. Once you're signed in, the proxy can
+   be turned off.
+4. Open the developer menu with a **three-finger press-and-hold** on the app.
+5. **`private_key_pem`:** in the menu, **MFA → Inspect MFA keys**. Copy the whole
+   `-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----` block.
+6. **`device_id`:** in the menu, **Archivos de registro → Compartir archivos de registro**, and save the
+   log files to your laptop. Give them to Claude to find the device id: it's the UUID in the
+   `mfa-accept: TRUSTED_DEVICE:<uuid>` lines.
+7. `username` and `password` are your Klar login.
 
 ```json
 {

@@ -21,27 +21,31 @@ just not a live session at the same moment.
 
 Klar ships an internal "Inspect MFA keys" dev screen gated by a Firebase Remote Config flag
 (`instrumentation_enabled`), and Firebase config is **not** TLS-pinned, so a local mitmproxy can flip that
-flag true in the Remote Config response; after a reinstall the screen shows the device's
-`-----BEGIN PRIVATE KEY-----`. The `deviceId` travels in `mfa-accept: TRUSTED_DEVICE:<uuid>` and in
-`gw.klar.mx` auth bodies, so it can be found in the same dump. Step by step:
+flag true in the Remote Config response. Klar's own hosts are pinned, so the proxy only intercepts Remote
+Config and passes everything else through; the flag has to be injected on the **first
+launch after a reinstall**, with the user signing in behind the proxy. The screen then shows the device's
+`-----BEGIN PRIVATE KEY-----`. The device id comes from the app's own logs, which the same menu can share
+once file logging is flagged on (`mfa-accept: TRUSTED_DEVICE:<uuid>`). The addon is not shipped; the
+`capture-credentials` skill has its spec. Step by step:
 [`docs/credentials.md`](../credentials.md#klar).
 
 ```mermaid
 sequenceDiagram
   participant U as user
   participant Ph as Klar app (paired phone)
-  participant M as mitmproxy (laptop)
+  participant M as mitmproxy addon (laptop, allow-hosts Remote Config only)
   participant FB as firebaseremoteconfig.googleapis.com
-  participant GW as gw.klar.mx
 
-  U->>M: start mitmproxy, saving a dump
-  U->>Ph: set Wi-Fi proxy to the laptop, trust the mitm CA
+  U->>M: start the Remote Config addon
+  U->>Ph: set Wi-Fi proxy to the laptop, trust the mitm CA, reinstall Klar
   Ph->>FB: Remote Config fetch (firebase namespace)
-  M->>Ph: inject instrumentation_enabled=true into the RC response
-  U->>Ph: open the hidden dev menu (multi-finger press-and-hold) -> Inspect MFA keys
+  M->>Ph: inject instrumentation_enabled + file_logging_enabled = true into the RC response
+  U->>Ph: sign in (pinned Klar hosts pass through the proxy untouched)
+  U->>Ph: open the hidden dev menu (three-finger press-and-hold) -> MFA -> Inspect MFA keys
   Ph-->>U: shows the device private key (copy it -> private_key_pem)
-  Ph->>GW: POST /api/v2/auth/refreshToken {token, deviceId}
-  Note over U: find deviceId in the dump (ask Claude)
+  U->>Ph: dev menu -> Archivos de registro -> Compartir archivos de registro
+  Ph-->>U: app log files (mfa-accept TRUSTED_DEVICE:uuid lines)
+  Note over U: Claude finds device_id in the logs
   Note over U: save {private_key_pem, device_id, username, password} in a local auth_klar.json - keep it private
 ```
 

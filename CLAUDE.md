@@ -60,7 +60,7 @@ flowchart TD
 | `bitso` | `api_key`, `api_secret` | official API key (read-only) | per coin |
 | `didi` | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | **mitmproxy capture** of one signed app request, replayed verbatim | Saldo, Mis Ahorros |
 | `gbm` | `refresh_token` | one-time `Gbm.login` (password + TOTP) | per strategy |
-| `klar` | `private_key_pem`, `device_id`, `username`, `password` | **mitmproxy capture** (device key + id) + your login | Cuenta, Ahorro, Depósito en garantía |
+| `klar` | `private_key_pem`, `device_id`, `username`, `password` | mitmproxy Remote Config flag → hidden dev menu shows the device key (Klar pins its hosts) + your login | Cuenta, Ahorro, Depósito en garantía |
 | `mercado_pago` | `token`, `session_id`, `device_id` | **mitmproxy capture** of the app session | Saldo, Apartados, Cripto |
 | `mifel` | `username`, `password` | your login (Keycloak password grant) | accounts + Caja |
 | `openbank` | `username`, `password`, `device_uuid` | your login + `device_uuid` from a **mitmproxy capture** (Android, patched APK) | checking, savings, investment |

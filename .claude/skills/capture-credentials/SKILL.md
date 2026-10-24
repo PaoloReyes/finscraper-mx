@@ -1,6 +1,6 @@
 ---
 name: capture-credentials
-description: Turn the user's own mitmproxy dump (.flows) or .har capture into a finscraper-mx auth_<id>.json (DiDi, Mercado Pago, Plata, Klar, Openbank) without exposing secrets. Use when the user hands over a capture, sets up or renews credentials, or a provider raises SessionExpired.
+description: Turn the user's own mitmproxy dump (.flows) or .har capture into a finscraper-mx auth_<id>.json (DiDi, Mercado Pago, Plata, Klar, Openbank) without exposing secrets. Use when the user hands over a capture, sets up or renews credentials, or a provider raises SessionExpired. Also has the spec for rebuilding Klar's Remote Config mitmproxy addon (Klar pins, so it has no dump).
 ---
 
 # Get credentials out of a capture
@@ -38,3 +38,33 @@ mitmproxy" section.
    `finscraper-mx balances <id> --auth auth_<id>.json` (report success or the error class, not balances).
 5. If the request's shape no longer matches `docs/credentials.md`, say what changed (by name) so the doc
    and provider can be updated. Remind them to delete the dump.
+
+## Klar: reconstruct the Remote Config addon, then read its logs
+
+Klar pins its own hosts, so there is no useful dump. Its device key is shown on a hidden dev menu that a
+Firebase Remote Config flag unlocks, and Remote Config is not pinned. Nothing for this lives in the repo;
+when the user asks, write a one-file mitmproxy addon to a gitignored path (e.g. `captures/klar_rc.py`)
+to this spec:
+
+- Run it as
+  `mitmdump -s captures/klar_rc.py --listen-port 8080 --allow-hosts 'firebaseremoteconfig\.googleapis\.com'`.
+  `--allow-hosts` is essential: every other host (all the pinned Klar APIs) is passed through without TLS
+  interception, so the app keeps working behind the proxy.
+- `response(flow)`: when the host is `firebaseremoteconfig.googleapis.com` and the path contains
+  `namespaces/firebase:fetch` (skip other namespaces such as fireperf), parse the JSON body, set
+  `entries["instrumentation_enabled"] = "true"` and `entries["file_logging_enabled"] = "true"` (create
+  `entries` if missing), set `state` to `"UPDATE"`, write it back with `flow.response.set_text(...)`, and
+  log that the flags were injected.
+- Print the laptop's LAN IP and the phone steps: proxy to IP:8080, trust http://mitm.it, **reinstall
+  Klar, then open it and sign in with the proxy on** (Remote Config is only fully fetched on the first
+  launch after an install).
+
+Then, on the phone: **three-finger press-and-hold** opens the dev menu.
+
+- `private_key_pem`: MFA → Inspect MFA keys. The user copies it into `auth_klar.json` themselves; never
+  ask them to paste it into chat.
+- `device_id`: **Archivos de registro → Compartir archivos de registro**; the user saves the log files to
+  the laptop and gives you the path. Search them for `mfa-accept: TRUSTED_DEVICE:<uuid>` (take the most
+  recent; they should all be the same UUID) and write that UUID as `device_id` into `auth_klar.json`.
+  The logs can hold tokens and personal data: search them with a script, print only the match count and a
+  redacted UUID, and remind the user to delete them afterwards.
