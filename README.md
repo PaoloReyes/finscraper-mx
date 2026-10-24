@@ -21,8 +21,6 @@ crypto exchanges. Every institution is used the same way and returns the same `B
 | `plata` | Plata | ✅ | `auth_request`, `installation_id` |
 | `skandia` | Skandia México | ✅ | `username`, `password` |
 
-Credit lines and credit cards are not reported. **Edenred** is in progress and not supported yet.
-
 **How to get each institution's auth fields: [`docs/credentials.md`](docs/credentials.md).** Some are a
 plain login; others are captured once from your own phone.
 
@@ -36,31 +34,85 @@ pip install "finscraper-mx @ git+https://github.com/PaoloReyes/finscraper-mx"
 
 ## Use
 
-Build a provider with its auth fields and call `fetch_balances()`:
+Build a provider with its auth fields as keyword arguments and call `fetch_balances()`. Every provider
+works the same way; only the auth fields change ([how to get them](docs/credentials.md)).
 
 ```python
 from finscraper_mx import get_provider
 
 provider = get_provider("bitso")(api_key="…", api_secret="…")
-# provider = get_provider("gbm")(refresh_token="…")   # same shape, different auth fields
+# provider = get_provider("gbm")(refresh_token="…")
+# provider = get_provider("mifel")(username="…", password="…")
 
 for balance in provider.fetch_balances():
-    print(balance.account, balance.kind, balance.amount, balance.currency)
+    print(f"{balance.account:<20} {balance.kind:<10} {balance.amount:>12,} {balance.currency}")
 ```
 
-Or from the command line, with the auth fields in a gitignored JSON file:
+Each `Balance` has:
+
+| Field | Meaning |
+|---|---|
+| `institution` | the provider id, e.g. `"bitso"` |
+| `account` | the institution's own label, e.g. `"Saldo"` or `"BTC"` |
+| `kind` | `checking`, `savings`, `investment`, `crypto` or `other` |
+| `amount` | a `Decimal`, valued in MXN |
+| `currency` | always `"MXN"` |
+| `as_of` | when it was read (UTC) |
+
+Reading several institutions at once, skipping any that fail:
+
+```python
+from finscraper_mx import FinscraperError, SessionExpired, get_provider
+
+providers = [
+    get_provider("bitso")(api_key="…", api_secret="…"),
+    get_provider("klar")(private_key_pem="…", device_id="…", username="…", password="…"),
+    get_provider("plata")(auth_request="…", installation_id="…"),
+]
+
+for provider in providers:
+    try:
+        balances = provider.fetch_balances()
+    except SessionExpired:
+        print(f"{provider.id}: session lapsed, re-capture its credentials (docs/credentials.md)")
+        continue
+    except FinscraperError as error:
+        print(f"{provider.id}: {error}")
+        continue
+    print(provider.id, sum(b.amount for b in balances))
+```
+
+### Command line
+
+The CLI reads the same auth fields from a gitignored JSON file:
 
 ```bash
 finscraper-mx list                                   # institutions and their auth fields
 finscraper-mx balances bitso --auth auth_bitso.json  # balances as JSON
 ```
 
-Errors all derive from `FinscraperError`:
+```json
+[
+  {
+    "institution": "bitso",
+    "account": "BTC",
+    "kind": "crypto",
+    "amount": "12345.67",
+    "currency": "MXN",
+    "as_of": "2026-10-24T03:00:00+00:00"
+  }
+]
+```
 
-- `AuthRequired`: a credential is missing, or the institution rejected it.
-- `SessionExpired`: the captured session or token lapsed; renew it as described in
-  [`docs/credentials.md`](docs/credentials.md).
-- `LayoutChanged`: the institution changed its API and the provider needs an update.
+### Errors
+
+All errors derive from `FinscraperError`:
+
+| Error | Meaning | What to do |
+|---|---|---|
+| `AuthRequired` | a credential is missing, or the institution rejected it | check the auth file |
+| `SessionExpired` | the captured session or token lapsed | renew it ([`docs/credentials.md`](docs/credentials.md)) |
+| `LayoutChanged` | the institution changed its API | the provider needs an update; open an issue |
 
 ## Design
 
