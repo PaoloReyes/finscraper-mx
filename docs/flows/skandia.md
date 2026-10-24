@@ -1,34 +1,37 @@
-# Skandia México — call flow
+# Skandia México — flow
 
 Getting the credentials: [`docs/credentials.md`](../credentials.md#skandia).
 
-Provider id: `skandia`  
-API: `mobile.skandia.com.mx` (SKANDIA NET MX mobile app backend)
+Reads one `Balance` per corporate savings product (Fondo de Ahorro), in MXN, from the SKANDIA NET MX mobile
+app backend (`mobile.skandia.com.mx`).
 
 ## Auth
 
-`username` (CURP, 18 characters) + `password` (6-digit numeric PIN) — same credentials as the web portal and mobile app.
+`username` (CURP, 18 characters) + `password` (6-digit numeric PIN) — the same credentials as the web
+portal and mobile app. No captcha or OTP: the app API takes the CURP and PIN directly. The JWT it returns
+expires in about 20 minutes, so the provider re-logs in on every `fetch_balances()` and never caches a
+session.
 
-No captcha or OTP: the app API takes the CURP and PIN directly.
-
-## Flow
+## Read — `fetch_balances()`
 
 ```mermaid
 sequenceDiagram
-    participant C as Caller
-    participant P as Skandia provider
-    participant S as mobile.skandia.com.mx
+  participant C as caller
+  participant P as Skandia provider
+  participant S as mobile.skandia.com.mx
 
-    C->>P: fetch_balances()
-    P->>S: POST /api/CoporateApp/Login/login?user=CURP&password=PIN
-    S-->>P: {Token JWT Plan PartId}
-    P->>S: POST /api/CoporateApp/Employees/Employees  Authorization: Basic JWT  corpplan: Plan
-    S-->>P: {Products [{ProductName TotalAmmount Detail}]}
-    P->>P: map Products to list[Balance(INVESTMENT)]
-    P-->>C: list[Balance]
+  C->>P: fetch_balances()
+  P->>S: POST /api/CoporateApp/Login/login?user=CURP&password=PIN
+  S-->>P: Token JWT, Plan, PartId
+  P->>S: POST /api/CoporateApp/Employees/Employees (Authorization Basic JWT, corpplan Plan)
+  S-->>P: Products with ProductName, TotalAmmount, Detail
+  P->>P: map Products to list of Balance (investment)
+  P-->>C: list of Balance
 ```
 
-## Response structure (Employees)
+## Balance mapping
+
+One `Balance` (`kind` `investment`) per `Products` entry, using `TotalAmmount`:
 
 ```json
 {
@@ -46,20 +49,7 @@ sequenceDiagram
 }
 ```
 
-One `Balance(AccountKind.INVESTMENT)` is emitted per `Products` entry using `TotalAmmount`.
+## Notes
 
-## Token
-
-The JWT returned by login expires in **20 minutes**. The provider re-logs in on every
-`fetch_balances()` call so the caller never has to manage session state.
-
-## Error handling
-
-| Condition | Exception |
-|---|---|
-| Missing `username` or `password` | `AuthRequired` |
-| HTTP 401 from login | `AuthRequired` |
-| HTTP 5xx from login | `SessionExpired` |
-| `Token` null / error message in response | `AuthRequired` |
-| HTTP 401/403 from Employees | `SessionExpired` |
-| `Products` missing or empty | `LayoutChanged` |
+- Errors: missing credential, login `401`, or a null `Token` / error message → `AuthRequired`; login `5xx`
+  or Employees `401/403` → `SessionExpired`; missing or empty `Products` → `LayoutChanged`.
