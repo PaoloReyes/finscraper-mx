@@ -21,9 +21,10 @@ crypto exchanges. Every institution is used the same way and returns the same `B
 | `plata` | Plata | ✅ | `auth_request`, `installation_id` |
 | `skandia` | Skandia México | ✅ | `username`, `password` |
 
-**How to get each institution's auth fields: [`docs/credentials.md`](docs/credentials.md).** Some are a
-plain login; most are captured once from your own phone's app with mitmproxy, walked through in
-[`docs/credentials.md`](docs/credentials.md#capturing-app-traffic-with-mitmproxy): save a dump, then ask Claude to pull the fields out of it.
+Some auth fields are a plain login; most are captured once from your own phone's app. See
+[Getting credentials](docs/credentials.md) for each institution, and
+[Capturing app traffic with mitmproxy](docs/credentials.md#capturing-app-traffic-with-mitmproxy) for the
+capture itself.
 
 ## Install
 
@@ -36,7 +37,7 @@ pip install "finscraper-mx @ git+https://github.com/PaoloReyes/finscraper-mx"
 ## Use
 
 Build a provider with its auth fields as keyword arguments and call `fetch_balances()`. Every provider
-works the same way; only the auth fields change ([how to get them](docs/credentials.md)).
+works the same way; only the auth fields change.
 
 ```python
 from finscraper_mx import get_provider
@@ -75,7 +76,7 @@ for provider in providers:
     try:
         balances = provider.fetch_balances()
     except SessionExpired:
-        print(f"{provider.id}: session lapsed, re-capture its credentials (docs/credentials.md)")
+        print(f"{provider.id}: session lapsed, re-capture its credentials")
         continue
     except FinscraperError as error:
         print(f"{provider.id}: {error}")
@@ -112,7 +113,7 @@ All errors derive from `FinscraperError`:
 | Error | Meaning | What to do |
 |---|---|---|
 | `AuthRequired` | a credential is missing, or the institution rejected it | check the auth file |
-| `SessionExpired` | the captured session or token lapsed | renew it ([`docs/credentials.md`](docs/credentials.md)) |
+| `SessionExpired` | the captured session or token lapsed | renew the credential |
 | `LayoutChanged` | the institution changed its API | the provider needs an update; open an issue |
 
 ## Design
@@ -126,7 +127,7 @@ All errors derive from `FinscraperError`:
 - **Few dependencies.** `httpx` (with HTTP/2, for Plata's gRPC API), `curl-cffi` for Mifel's login, and
   `cryptography` for Klar's device-key challenges.
 
-How each provider talks to its institution: [`docs/flows/`](docs/flows).
+How each provider talks to its institution: [Call flows](docs/flows).
 
 ## Development
 
@@ -136,5 +137,5 @@ python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/python .claude/hooks/precommit_gate.py --check   # compliance gate, also run before every commit
 ```
 
-To add an institution, follow [`.claude/rules/providers.md`](.claude/rules/providers.md) (or run
+To add an institution, follow the [Provider rules](.claude/rules/providers.md) (or run
 `/add-provider <institution>` in Claude Code). Tests use mocked HTTP with fake ids, tokens and amounts only.
