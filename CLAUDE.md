@@ -55,17 +55,17 @@ flowchart TD
   skandia -->|"fetch_balances()"| bal
 ```
 
-| id | auth fields | reads | source |
-|----|-------------|-------|--------|
-| `bitso` | `api_key`, `api_secret` | per-coin, valued in MXN | official REST API |
-| `didi` | `token`, `signed_query`, `wsgsig` (+ `secdd`/`oid`/`rid`; captured signed request replayed verbatim, as wsgsig is request-bound) | Saldo (savings) + Mis Ahorros (fixed-term), in MXN | SoFiPo app home API |
-| `gbm` | `refresh_token` (one-time `Gbm.login`) | per-strategy, in MXN | auth + appgbm + homebroker |
-| `klar` | `private_key_pem`, `device_id`, `username`, `password` (device key + trusted-device id captured from the paired phone) | Cuenta, Ahorro, Depósito en garantía, in MXN (credit excluded) | Keycloak 2-step login + per-request RSA MFA on api.klar.mx |
-| `mercado_pago` | `token`, `session_id`, `device_id` (captured app session) | per balance tab, in MXN | mobile home-hub API |
-| `mifel` | `username`, `password` | account balances, in MXN | Keycloak + integracion API |
-| `openbank` | `username`, `password`, `device_uuid` | accounts (checking/savings/investment), in MXN (credit excluded) | Openbank MX app API (`api.openbank.mx`): login + `mb-api-gp-exp` global position |
-| `plata` | `auth_request`, `installation_id` (capture the Auth call from proxy; replayed to mint a session token) | accounts + investment, in MXN (Acciones via Google FX) | mobile app gRPC API |
-| `skandia` | `username`, `password` | Fondo de Ahorro, in MXN | SKANDIA NET MX mobile app API |
+| id | auth fields | how the auth is obtained | reads (MXN) |
+|----|-------------|--------------------------|-------------|
+| `bitso` | `api_key`, `api_secret` | official API key (read-only) | per coin |
+| `didi` | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | **mitmproxy capture** of one signed app request, replayed verbatim | Saldo, Mis Ahorros |
+| `gbm` | `refresh_token` | one-time `Gbm.login` (password + TOTP) | per strategy |
+| `klar` | `private_key_pem`, `device_id`, `username`, `password` | **mitmproxy capture** (device key + id) + your login | Cuenta, Ahorro, Depósito en garantía |
+| `mercado_pago` | `token`, `session_id`, `device_id` | **mitmproxy capture** of the app session | Saldo, Apartados, Cripto |
+| `mifel` | `username`, `password` | your login (Keycloak password grant) | accounts + Caja |
+| `openbank` | `username`, `password`, `device_uuid` | your login + `device_uuid` from a **mitmproxy capture** (Android, patched APK) | checking, savings, investment |
+| `plata` | `auth_request`, `installation_id` | **mitmproxy capture** of the app's Auth call | Cuenta, pockets, Acciones |
+| `skandia` | `username`, `password` | your login (CURP + PIN) | Fondo de Ahorro |
 
 Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) ·
 [`docs/flows/didi.md`](docs/flows/didi.md) ·
@@ -78,7 +78,7 @@ Detailed per-provider call flows: [`docs/flows/bitso.md`](docs/flows/bitso.md) �
 [`docs/flows/skandia.md`](docs/flows/skandia.md) (one `docs/flows/<id>.md` per provider).
 
 How a user obtains each provider's auth fields (what to capture, example `auth_<id>.json`, lifetime):
-[`docs/credentials.md`](docs/credentials.md). Edenred is **not** a provider yet (blocked on certificate pinning).
+[`docs/credentials.md`](docs/credentials.md), including the mitmproxy walkthrough most of them need. Edenred is **not** a provider yet (blocked on certificate pinning).
 
 ## Rules
 
@@ -102,15 +102,15 @@ src/finscraper_mx/
   cli.py                    finscraper-mx list / balances <id> --auth auth_<id>.json
 tests/test_<id>.py          one test file per provider (mocked httpx, fake data)
 docs/flows/<id>.md          detailed mermaid call-flow per provider
-docs/credentials.md         how to obtain every provider's auth fields
-scripts/klar_capture.py     mitmproxy helper for capturing Klar's device key + id
+docs/credentials.md         how to obtain every provider's auth fields (incl. mitmproxy capture)
 .claude/                    rules · skills · commands · agents · hooks · settings.json
 ```
 
 ## .claude/ structure
 
 - **`rules/`** — repo conventions (`providers.md`).
-- **`skills/`** — `scaffold-provider` (scaffold a provider, with templates).
+- **`skills/`** — `scaffold-provider` (scaffold a provider, with templates); `capture-credentials` (find a provider's auth
+  fields in the user's mitmproxy dump, safely; what to look for is in `docs/credentials.md`).
 - **`commands/`** — `/add-provider <institution>` (runs the provider-builder agent, which follows the skill).
 - **`hooks/precommit_gate.py`** — one file: the hook that blocks commit/push, and `--check` for a manual gate run.
 - **`agents/`** — `provider-builder` (subagent that adds/maintains providers end to end).
@@ -124,6 +124,7 @@ scripts/klar_capture.py     mitmproxy helper for capturing Klar's device key + i
 
 ## Workflows
 
+- **Get credentials from a capture** → the `capture-credentials` skill ([`docs/credentials.md`](docs/credentials.md#capturing-app-traffic-with-mitmproxy)).
 - **Add a provider** → `/add-provider <institution>`, the `scaffold-provider` skill, or hand it to the `provider-builder` agent.
 - **Before commit/push** → the hook runs the gate automatically; run it by hand with:
   ```bash

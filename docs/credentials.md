@@ -17,7 +17,7 @@ this page use placeholders.
 | [`bitso`](#bitso) | `api_key`, `api_secret` | create a read-only API key on Bitso | until you revoke it |
 | [`didi`](#didi) | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | capture one app request with a proxy | short; re-capture often |
 | [`gbm`](#gbm) | `refresh_token` | run `Gbm.login(...)` once with your MFA code | until GBM expires it |
-| [`klar`](#klar) | `private_key_pem`, `device_id`, `username`, `password` | capture once from your paired phone (scripted) | until you re-pair the phone |
+| [`klar`](#klar) | `private_key_pem`, `device_id`, `username`, `password` | capture once from your paired phone | until you re-pair the phone |
 | [`mercado_pago`](#mercado_pago) | `token`, `session_id`, `device_id` | capture one app request with a proxy | until the app login lapses |
 | [`mifel`](#mifel) | `username`, `password` | your Mifel online-banking login | no expiry |
 | [`openbank`](#openbank) | `username`, `password`, `device_uuid` | your login + the app's device id, captured once | until the device is re-registered |
@@ -52,22 +52,84 @@ When a credential stops working, the provider raises `SessionExpired`; follow th
 institution. `AuthRequired` means a field is missing from the file, or (for password logins) the
 institution rejected the username or password.
 
-## Capturing app traffic (DiDi, Mercado Pago, Plata, Klar, Openbank)
+## Capturing app traffic with mitmproxy
 
-Five providers need a value that only the institution's mobile app ever sees. You get it by routing your
-phone through [mitmproxy](https://mitmproxy.org) on your laptop once and reading the app's own request:
+Five providers (DiDi, Mercado Pago, Plata, Klar, and Openbank's device id) need values that only the
+institution's mobile app ever sends: the app signs or attests its login on the phone, so the library can't
+log in by itself. Instead you capture what your own app sends once, and the provider replays it.
 
-1. `pip install mitmproxy`, then run `mitmweb` (a browser UI) on a laptop on the same Wi-Fi as the phone.
-   If the router isolates clients, use a hotspot.
-2. On the phone, set the Wi-Fi proxy to the laptop's IP, port `8080`. Open `http://mitm.it`, install the
-   certificate, and trust it fully (on iOS: Settings → General → About → Certificate Trust Settings). On
-   Android, apps ignore user-installed certificates by default, which is why Openbank needs a patched APK.
-3. Open the institution's app and sign in normally. Find the request named in that institution's section
-   below and copy the listed values.
-4. Turn the phone's proxy off when you're done.
+The process is the same for every app: **save a dump of the app's traffic, then ask Claude to find the
+fields in it.** The per-provider sections below list which request carries which field. They describe the
+captures each provider was built from; app versions drift, so letting Claude read the dump (the
+`capture-credentials` skill in this repo) is more reliable than copying values by hand.
 
-Capture from your own account only. A saved capture (`.har`, `.flows`) holds your session, so delete it
-or keep it out of the repo (`*.har` and `captures/` are gitignored).
+Use this only with your own accounts. A dump holds live sessions, so treat it like a password.
+
+### 1. Start mitmproxy on your laptop and save everything
+
+```bash
+pip install mitmproxy
+mkdir -p captures                                     # gitignored
+mitmweb --listen-port 8080 -w captures/<id>.flows     # e.g. captures/plata.flows
+```
+
+`mitmweb` shows the traffic live at http://127.0.0.1:8081 and `-w` saves all of it to the dump. (A `.har`
+export from mitmweb, File → Export, works too.) Find the laptop's Wi-Fi IP with `ipconfig getifaddr en0`
+(macOS) or `hostname -I` (Linux). Phone and laptop must be on the same Wi-Fi; if the router isolates
+devices, use a hotspot.
+
+### 2. Point the phone at it
+
+**iPhone**
+
+1. Settings → Wi-Fi → (i) on your network → Configure Proxy → **Manual**: server = the laptop's IP,
+   port = `8080`.
+2. In Safari open **http://mitm.it**, download the iOS profile, then Settings → General → VPN & Device
+   Management → install it.
+3. Settings → General → About → **Certificate Trust Settings** → turn on full trust for mitmproxy.
+
+**Android**
+
+1. Wi-Fi → your network → Proxy → **Manual**: host = the laptop's IP, port = `8080`.
+2. Open **http://mitm.it**, download the Android certificate and install it (Settings → Security →
+   Encryption & credentials → Install a certificate → CA certificate).
+3. Android apps ignore user-installed certificates by default, so many banking apps won't talk through the
+   proxy unless the app is patched to trust them (that's how Openbank was captured; see
+   [`flows/openbank.md`](flows/openbank.md#why-the-patched-capture-was-needed)).
+
+Check it works: open any website on the phone and watch it appear in mitmweb.
+
+### 3. Open the app
+
+Open the institution's app, **sign in, and let the home screen load**. That's when the app sends the
+request with its auth. Then turn the phone's proxy **off** and stop mitmweb with Ctrl-C so the dump is
+written out.
+
+### 4. Ask Claude to pull out the fields
+
+In Claude Code, in this repo:
+
+> Use the capture-credentials skill to get the `plata` credentials from `captures/plata.flows`.
+
+Claude finds the right request in the dump, writes the fields into a gitignored `auth_<id>.json`, and
+never shows the secret values in the chat. It tells you which fields you still have to type in yourself
+(your own `username` / `password`, for example). Then check it:
+
+```bash
+finscraper-mx balances plata --auth auth_plata.json
+```
+
+If the app's request isn't in the dump at all, the app is probably pinning its certificates for that
+host, which can't be fixed from the proxy side.
+
+### 5. Clean up
+
+```bash
+rm captures/<id>.flows
+```
+
+Keep only the `auth_<id>.json` files (gitignored). When a provider later raises `SessionExpired`, repeat
+these steps for that app.
 
 ---
 
@@ -155,16 +217,15 @@ them. In Python, `location=(lat, lon)` sets the device location GBM's API expect
 Klar answers every request with an RSA challenge that only a paired ("trusted") device can solve, and
 pairing a new device needs a face scan and SMS. So the provider reuses your phone's existing device key.
 
-1. On a laptop: `pip install mitmproxy`, then `python scripts/klar_capture.py`. It prints the laptop's IP
-   and the phone steps, then starts the proxy.
-2. Point the phone at the proxy and trust its certificate (see above).
-3. **Reinstall Klar** and sign in. Reinstalling forces Klar to re-fetch its remote config, which the
-   script uses to switch on Klar's hidden developer menu.
-4. In the app, press and hold with several fingers to open the developer menu, then go to **MFA → Inspect
-   MFA keys**. Copy the whole `-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----` block →
-   `private_key_pem`.
-5. Watch the script's terminal for `>>> deviceId = <uuid>` → `device_id`.
-6. `username` and `password` are your Klar login.
+1. **`device_id`:** capture the Klar app signing in ([above](#capturing-app-traffic-with-mitmproxy)) and ask Claude to find
+   it. It's the UUID in the `mfa-accept: TRUSTED_DEVICE:<uuid>` header (or a `deviceId` field in a
+   `gw.klar.mx` auth call).
+2. **`private_key_pem`:** the phone's device key, shown on Klar's hidden **MFA → Inspect MFA keys**
+   developer screen. That screen only appears when Klar's Firebase Remote Config turns on
+   `instrumentation_enabled`, which has to be flipped in the proxied Remote Config response, and the app
+   reinstalled so it re-fetches the config. This step is still being re-tested; ask Claude to help with it.
+   Copy the whole `-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----` block.
+3. `username` and `password` are your Klar login.
 
 ```json
 {
@@ -265,22 +326,8 @@ provider resends that captured login request to get a fresh session on every rea
 3. `auth_request` = the request's **raw body, base64-encoded**. `installation_id` = its
    `x-plata-installation-id` header.
 
-The body is binary, so copying it by hand is fiddly. Saving the capture with `mitmdump -w plata.flows` and
-running this prints the finished file:
-
-```python
-import base64, json
-from mitmproxy import io
-
-with open("plata.flows", "rb") as f:
-    for flow in io.FlowReader(f).stream():
-        if flow.request.path.endswith("/AuthFlowService/Auth"):
-            print(json.dumps({
-                "auth_request": base64.b64encode(flow.request.content).decode(),
-                "installation_id": flow.request.headers["x-plata-installation-id"],
-            }))
-            break
-```
+The body is binary, so don't copy it by hand: save a `.flows` dump and ask Claude to base64 it into
+`auth_plata.json` (see [above](#capturing-app-traffic-with-mitmproxy)).
 
 ```json
 {"auth_request": "BASE64_OF_THE_AUTH_REQUEST_BODY", "installation_id": "00000000-0000-0000-0000-000000000000"}

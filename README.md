@@ -22,7 +22,8 @@ crypto exchanges. Every institution is used the same way and returns the same `B
 | `skandia` | Skandia México | ✅ | `username`, `password` |
 
 **How to get each institution's auth fields: [`docs/credentials.md`](docs/credentials.md).** Some are a
-plain login; others are captured once from your own phone.
+plain login; most are captured once from your own phone's app with mitmproxy, walked through in
+[`docs/credentials.md`](docs/credentials.md#capturing-app-traffic-with-mitmproxy): save a dump, then ask Claude to pull the fields out of it.
 
 ## Install
 

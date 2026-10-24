@@ -19,28 +19,29 @@ just not a live session at the same moment.
 
 ## One-time setup (capture the device key + id from your phone)
 
-`scripts/klar_capture.py` automates the proxy side; the phone steps are manual. See the script's header and
-`### Capturing the credentials` below. In short, Klar ships an internal "Inspect MFA keys" dev screen gated
-by a Firebase Remote Config flag (`instrumentation_enabled`) — and Firebase config is **not** TLS-pinned,
-so a local mitmproxy can flip that flag true; the screen then shows the device's `-----BEGIN PRIVATE KEY-----`.
-The `deviceId` is read off a `gw.klar.mx` refresh body (also captured).
+Klar ships an internal "Inspect MFA keys" dev screen gated by a Firebase Remote Config flag
+(`instrumentation_enabled`), and Firebase config is **not** TLS-pinned, so a local mitmproxy can flip that
+flag true in the Remote Config response; after a reinstall the screen shows the device's
+`-----BEGIN PRIVATE KEY-----`. The `deviceId` travels in `mfa-accept: TRUSTED_DEVICE:<uuid>` and in
+`gw.klar.mx` auth bodies, so it can be found in the same dump. Step by step:
+[`docs/credentials.md`](../credentials.md#klar).
 
 ```mermaid
 sequenceDiagram
   participant U as user
   participant Ph as Klar app (paired phone)
-  participant M as mitmproxy (laptop, klar_capture.py)
+  participant M as mitmproxy (laptop)
   participant FB as firebaseremoteconfig.googleapis.com
   participant GW as gw.klar.mx
 
-  U->>M: run scripts/klar_capture.py (prints laptop IP + proxy steps)
+  U->>M: start mitmproxy, saving a dump
   U->>Ph: set Wi-Fi proxy to the laptop, trust the mitm CA
   Ph->>FB: Remote Config fetch (firebase namespace)
   M->>Ph: inject instrumentation_enabled=true into the RC response
   U->>Ph: open the hidden dev menu (multi-finger press-and-hold) -> Inspect MFA keys
   Ph-->>U: shows the device private key (copy it -> private_key_pem)
   Ph->>GW: POST /api/v2/auth/refreshToken {token, deviceId}
-  M-->>U: prints deviceId from the gw body
+  Note over U: find deviceId in the dump (ask Claude)
   Note over U: save {private_key_pem, device_id, username, password} in a local auth_klar.json - keep it private
 ```
 
@@ -74,30 +75,6 @@ sequenceDiagram
     P-->>C: list of Balance
   end
 ```
-
-## Capturing the credentials
-
-Run on a laptop the phone can reach (same Wi-Fi, no client isolation — a hotspot works):
-
-```bash
-python scripts/klar_capture.py          # prints the laptop IP + exact phone steps, then runs mitmproxy
-```
-
-1. On the phone: Settings → Wi-Fi → Configure Proxy → Manual → the laptop IP shown, port `8080`; then
-   Safari → `http://mitm.it` → install and fully trust the mitmproxy CA.
-2. **Reinstall Klar** (forces a full Remote Config fetch so the injected `instrumentation_enabled` +
-   `file_logging_enabled` flags take effect), then sign in.
-3. Open the hidden dev menu: a **multi-finger press-and-hold** on the app, then navigate to **MFA →
-   Inspect MFA keys**. Copy the `-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----` block →
-   `private_key_pem`.
-4. Watch the `klar_capture.py` terminal for `>>> deviceId = <uuid>` (printed from a `gw.klar.mx` refresh).
-   If gw turns out to be pinned, it won't appear — instead export the app's logs (file logging was flagged
-   on) and read the `mfa-accept: TRUSTED_DEVICE:<uuid>` line.
-5. Save all four fields in a local, gitignored `auth_klar.json`:
-   ```json
-   {"private_key_pem": "-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----\n",
-    "device_id": "…", "username": "you@example.mx", "password": "…"}
-   ```
 
 Notes:
 

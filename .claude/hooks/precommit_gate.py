@@ -98,7 +98,7 @@ def run_gate() -> int:
 
     section("no secrets tracked")
     tracked = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.split()
-    bad = [f for f in tracked if re.search(r"(_tokens|_config|_values|_auth)\.json$|(^|/)auth.*\.json$|\.env$|\.har$", f)]
+    bad = [f for f in tracked if re.search(r"(_tokens|_config|_values|_auth)\.json$|(^|/)auth.*\.json$|\.env$|\.har$|\.flows$", f)]
     check(not bad, "no credential/session files tracked" + (f" (found: {', '.join(bad)})" if bad else ""))
 
     section("tests pass")

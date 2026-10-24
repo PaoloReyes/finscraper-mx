@@ -11,6 +11,7 @@ auth*.json
 *_auth.json
 .env
 *.har
+*.flows
 captures/
 # Local per-user config, tokens and outputs (account ids, refresh tokens, balances)
 *_config.json
