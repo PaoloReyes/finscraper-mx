@@ -71,7 +71,7 @@ def run_gate() -> int:
     section("README in sync")
     readme = (root / "README.md").read_text(encoding="utf-8")
     for pid in PROVIDERS:
-        check(re.search(rf"\|\s*`{re.escape(pid)}`\s*\|", readme) is not None, f"{pid}: listed in the README table")
+        check(re.search(rf"^\|.*`{re.escape(pid)}`.*\|\s*$", readme, re.M) is not None, f"{pid}: listed in the README table")
     check("get_provider(" in readme, "README shows the standard get_provider() usage")
     check("from finscraper_mx.institutions" not in readme, "README avoids direct-import examples (use get_provider)")
 

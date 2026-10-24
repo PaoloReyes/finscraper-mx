@@ -9,17 +9,17 @@ crypto exchanges. Every institution is used the same way and returns the same `B
 
 ## Supported institutions
 
-| Id | Institution | Reads (all in MXN) | Auth fields |
-|---|---|---|---|
-| `bitso` | Bitso | one balance per coin | `api_key`, `api_secret` (read-only API key) |
-| `didi` | DiDi Cuenta | Saldo, Mis Ahorros | `token`, `signed_query`, `wsgsig` (captured app request) |
-| `gbm` | GBM+ | one balance per strategy | `refresh_token` (from a one-time `Gbm.login`) |
-| `klar` | Klar México | Cuenta, Ahorro, Depósito en garantía | `private_key_pem`, `device_id`, `username`, `password` |
-| `mercado_pago` | Mercado Pago | Saldo, Apartados, Criptomonedas | `token`, `session_id`, `device_id` (captured app session) |
-| `mifel` | Banco Mifel | each account, plus its Caja | `username`, `password` |
-| `openbank` | Openbank México | checking, savings and investment accounts | `username`, `password`, `device_uuid` |
-| `plata` | Plata | Cuenta, pockets, Plata Acciones | `auth_request`, `installation_id` (captured app login) |
-| `skandia` | Skandia México | Fondo de Ahorro | `username` (CURP), `password` (PIN) |
+| Institution | Support | Auth fields |
+|---|---|---|
+| Bitso (`bitso`) | ✅ | `api_key`, `api_secret` |
+| DiDi Cuenta (`didi`) | ✅ | `token`, `signed_query`, `wsgsig` |
+| GBM+ (`gbm`) | ✅ | `refresh_token` |
+| Klar México (`klar`) | ✅ | `private_key_pem`, `device_id`, `username`, `password` |
+| Mercado Pago (`mercado_pago`) | ✅ | `token`, `session_id`, `device_id` |
+| Banco Mifel (`mifel`) | ✅ | `username`, `password` |
+| Openbank México (`openbank`) | ✅ | `username`, `password`, `device_uuid` |
+| Plata (`plata`) | ✅ | `auth_request`, `installation_id` |
+| Skandia México (`skandia`) | ✅ | `username`, `password` |
 
 Credit lines and credit cards are not reported. **Edenred** is in progress and not supported yet.
 
