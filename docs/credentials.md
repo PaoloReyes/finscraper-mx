@@ -15,13 +15,13 @@ this page use placeholders.
 | Id | What you supply | How you get it | How long it lasts |
 |---|---|---|---|
 | [`bitso`](#bitso) | `api_key`, `api_secret` | create a read-only API key on Bitso | until you revoke it |
-| [`didi`](#didi) | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | capture one app request with a proxy | short; re-capture often |
+| [`didi`](#didi) | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | capture one app request with a proxy | no expiry |
 | [`gbm`](#gbm) | `refresh_token` | run `Gbm.login(...)` once with your MFA code | until GBM expires it |
 | [`klar`](#klar) | `private_key_pem`, `device_id`, `username`, `password` | capture once from your paired phone | until you re-pair the phone |
-| [`mercado_pago`](#mercado_pago) | `token`, `session_id`, `device_id` | capture one app request with a proxy | until the app login lapses |
+| [`mercado_pago`](#mercado_pago) | `token`, `session_id`, `device_id` | capture one app request with a proxy | until you re-pair the phone |
 | [`mifel`](#mifel) | `username`, `password` | your Mifel online-banking login | no expiry |
-| [`openbank`](#openbank) | `username`, `password`, `device_uuid` | your login + the app's device id, captured once | until the device is re-registered |
-| [`plata`](#plata) | `auth_request`, `installation_id` | capture the app's Auth call with a proxy | long (hours+); until the device key rotates |
+| [`openbank`](#openbank) | `username`, `password`, `device_uuid` | your login + the app's device id, captured once | until you re-pair the phone |
+| [`plata`](#plata) | `auth_request`, `installation_id` | capture the app's Auth call with a proxy | until you re-pair the phone |
 | [`skandia`](#skandia) | `username` (CURP), `password` (PIN) | your Skandia Net login | no expiry |
 
 ## Where to keep them
