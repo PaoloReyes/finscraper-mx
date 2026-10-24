@@ -31,23 +31,16 @@ sequenceDiagram
 
 ## Balance mapping
 
-One `Balance` (`kind` `investment`) per `Products` entry, using `TotalAmmount`:
+One `Balance` per entry in the `Products` array returned by `Employees`:
 
-```json
-{
-  "Products": [
-    {
-      "ProductName": "FONDO DE AHORRO",
-      "ProductType": "FondoAhorro",
-      "TotalAmmount": 50000.00,
-      "Detail": [
-        {"Id": "S", "Key": "APORTACION EMPLEADO", "Value": 25000.00},
-        {"Id": "T", "Key": "APORTACION EMPRESA",  "Value": 25000.00}
-      ]
-    }
-  ]
-}
-```
+| Source field | Used for |
+|---|---|
+| `ProductName` (e.g. "FONDO DE AHORRO") | account label |
+| `TotalAmmount` | amount (`Decimal`, MXN) |
+| — | kind is always `investment` |
+
+The per-contributor breakdown (`Detail[]`, e.g. APORTACION EMPLEADO / EMPRESA) is not emitted; the
+reported balance is the product's `TotalAmmount`.
 
 ## Notes
 
