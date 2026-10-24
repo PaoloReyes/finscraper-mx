@@ -9,17 +9,17 @@ crypto exchanges. Every institution is used the same way and returns the same `B
 
 ## Supported institutions
 
-| Institution | Support | Auth fields |
-|---|---|---|
-| Bitso (`bitso`) | ✅ | `api_key`, `api_secret` |
-| DiDi Cuenta (`didi`) | ✅ | `token`, `signed_query`, `wsgsig` |
-| GBM+ (`gbm`) | ✅ | `refresh_token` |
-| Klar México (`klar`) | ✅ | `private_key_pem`, `device_id`, `username`, `password` |
-| Mercado Pago (`mercado_pago`) | ✅ | `token`, `session_id`, `device_id` |
-| Banco Mifel (`mifel`) | ✅ | `username`, `password` |
-| Openbank México (`openbank`) | ✅ | `username`, `password`, `device_uuid` |
-| Plata (`plata`) | ✅ | `auth_request`, `installation_id` |
-| Skandia México (`skandia`) | ✅ | `username`, `password` |
+| Id | Institution | Support | Auth fields |
+|---|---|---|---|
+| `bitso` | Bitso | ✅ | `api_key`, `api_secret` |
+| `didi` | DiDi Cuenta | ✅ | `token`, `signed_query`, `wsgsig` |
+| `gbm` | GBM+ | ✅ | `refresh_token` |
+| `klar` | Klar México | ✅ | `private_key_pem`, `device_id`, `username`, `password` |
+| `mercado_pago` | Mercado Pago | ✅ | `token`, `session_id`, `device_id` |
+| `mifel` | Banco Mifel | ✅ | `username`, `password` |
+| `openbank` | Openbank México | ✅ | `username`, `password`, `device_uuid` |
+| `plata` | Plata | ✅ | `auth_request`, `installation_id` |
+| `skandia` | Skandia México | ✅ | `username`, `password` |
 
 Credit lines and credit cards are not reported. **Edenred** is in progress and not supported yet.
 
