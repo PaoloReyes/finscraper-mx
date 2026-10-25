@@ -152,3 +152,12 @@ def test_no_balance_accounts_is_layout_changed():
 def test_missing_balances_list_is_layout_changed():
     with pytest.raises(LayoutChanged):
         provider(fake_app(balances={"nope": []})).fetch_balances()
+
+
+def test_accounts_with_the_same_label_get_distinct_stable_names():
+    def acct(id, type, units):
+        return {"id": id, "type": type, "availableBalance": {"units": units, "nanos": 0, "currencyCode": "MXN"}}
+    body = {"balances": [acct("acc-0001", "DEBIT", "10"), acct("sav-aaaa", "SAVINGS", "20"), acct("sav-bbbb", "SAVINGS", "30")]}
+    provider = get_provider("klar")(**AUTH, client=fake_app(balances=body))
+    names = [b.account for b in provider.fetch_balances()]
+    assert names == ["Cuenta", "Ahorro ·aaaa", "Ahorro ·bbbb"]
