@@ -82,6 +82,9 @@ One `Balance` per non-credit account, by account `type`:
 | `SECURED_DEPOSIT` | `investment` | Depósito en garantía |
 
 `CREDIT` and `DEBIT_PENDING` are skipped on purpose, so the reported total mirrors the app's holdings.
+When several accounts would get the same label (e.g. two `SAVINGS` both "Ahorro"), each of those gets the
+last 4 characters of its account `id` appended (`Ahorro ·3f9a`), so every balance has a distinct, stable
+name a caller can pick.
 Amounts arrive as `{units, nanos}` (nanos = 1e-9 of a unit) and are combined to 2-decimal MXN.
 
 ## Notes

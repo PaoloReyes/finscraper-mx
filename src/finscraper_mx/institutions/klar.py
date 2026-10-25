@@ -98,7 +98,7 @@ class Klar(Provider):
         accounts = body.get("balances")
         if not isinstance(accounts, list):
             raise LayoutChanged("klar: balances response has no 'balances' list; the app's API changed")
-        balances = []
+        held = []
         for account in accounts:
             kind_type = account.get("type")
             if kind_type in EXCLUDED_TYPES:
@@ -106,8 +106,13 @@ class Klar(Provider):
             money = account.get("availableBalance") or {}
             if "units" not in money and "nanos" not in money:
                 continue
-            kind = KIND_BY_TYPE.get(kind_type, AccountKind.OTHER)
-            balances.append(Balance(self.id, _label(account), kind, _amount(money), money.get("currencyCode") or "MXN"))
+            held.append((account, money))
+        labels = _unique_labels([account for account, _ in held])
+        balances = [
+            Balance(self.id, label, KIND_BY_TYPE.get(account.get("type"), AccountKind.OTHER), _amount(money),
+                    money.get("currencyCode") or "MXN")
+            for label, (account, money) in zip(labels, held)
+        ]
         if not balances:
             raise LayoutChanged("klar: no (non-credit) accounts in the balances response; the app's layout changed")
         return balances
@@ -232,6 +237,20 @@ def _label(account: dict) -> str:
     if name:
         return str(name).strip()
     return LABELS.get(account.get("type"), str(account.get("type") or "?"))
+
+
+def _unique_labels(accounts: list[dict]) -> list[str]:
+    """One name per account. Several accounts of one type (e.g. two "Ahorro") would share a name, so a caller
+    couldn't pick one of them; those get the end of their account id, which is stable across reads
+    ("Ahorro ·3f9a"), or their position when Klar sends no id."""
+    labels = [_label(account) for account in accounts]
+    out = []
+    for i, (label, account) in enumerate(zip(labels, accounts)):
+        if labels.count(label) > 1:
+            tail = str(account.get("id") or "")[-4:]
+            label = f"{label} ·{tail}" if tail else f"{label} {labels[:i + 1].count(label)}"
+        out.append(label)
+    return out
 
 
 def _amount(money: dict) -> Decimal:
