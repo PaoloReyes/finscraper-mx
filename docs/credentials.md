@@ -16,7 +16,7 @@ this page use placeholders.
 |---|---|---|---|
 | [`bitso`](#bitso) | `api_key`, `api_secret` | create a read-only API key on Bitso | until you revoke it |
 | [`didi`](#didi) | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | capture one app request with a proxy | no expiry |
-| [`gbm`](#gbm) | `refresh_token` | run `Gbm.login(...)` once with your MFA code | until GBM expires it |
+| [`gbm`](#gbm) | `username`, `password`, `totp_secret`, `device_id` | take over the TOTP seed once; device id from one app capture | until you use the GBM app again |
 | [`klar`](#klar) | `private_key_pem`, `device_id`, `username`, `password` | capture once from your paired phone | until you re-pair the phone |
 | [`mercado_pago`](#mercado_pago) | `token`, `session_id`, `device_id` | capture one app request with a proxy | until you re-pair the phone |
 | [`mifel`](#mifel) | `username`, `password` | your Mifel online-banking login | no expiry |
@@ -54,9 +54,10 @@ institution rejected the username or password.
 
 ## Capturing app traffic with mitmproxy
 
-Four providers (DiDi, Mercado Pago, Plata, and Openbank's device id) need values that only the
-institution's mobile app ever sends: the app signs or attests its login on the phone, so the library can't
-log in by itself. Instead you capture what your own app sends once, and the provider replays it.
+Several providers (DiDi, Mercado Pago, Plata, Openbank's device id, and GBM's device id) need values that
+only the institution's mobile app ever sends: the app signs or attests its login on the phone, or ties it
+to a registered device, so the library can't produce them by itself. Instead you capture what your own app
+sends once, and the provider replays or reuses it.
 
 The process is the same for every app: **save a dump of the app's traffic, then ask Claude to find the
 fields in it.** The per-provider sections below list which request carries which field. They describe the
@@ -189,28 +190,50 @@ If your capture's headers or body differ from the provider's defaults, also pass
 
 ## gbm
 
-**Field:** `refresh_token`, minted once by a login helper.
+**Fields:** `username`, `password`, `totp_secret`, `device_id`. The provider is fully headless: it
+generates GBM's 6-digit MFA code itself from `totp_secret` and logs in on every read — no refresh token,
+no authenticator app at run time. (GBM sometimes skips the MFA challenge and returns the authorization
+code straight from the login; the provider handles both.)
 
-GBM's login needs a 6-digit code from your authenticator app, so it runs once by hand:
+GBM's MFA is a standard TOTP, but its **active** seed can't be read back: `GET /security-settings/totp/key`
+only mints fresh *enrollment* secrets, and the app's in-app seed is encrypted on the phone. So going
+headless means **activating a seed the scraper controls**, which **replaces your GBM app's own
+authenticator** — the app's code generator stops working until you re-enroll it, and re-enrolling rotates
+the seed back and breaks the scraper. Only do this if you'll log into GBM through the scraper, not the
+app. Collected once, with Claude (the `capture-credentials` skill):
 
-```python
-from finscraper_mx import get_provider
+1. **`device_id`** — the `device-mac-address` the app sends (a UUID). Capture your own app's login with a
+   proxy (see [above](#capturing-app-traffic-with-mitmproxy)): open GBM with the capture on and sign in;
+   copy that header from any `auth.gbm.com/api/v1/session/...` request.
+2. **`totp_secret`** — ask Claude to run the **takeover**. With your `username`/`password` and that
+   `device_id`, Claude logs in (one current code from your GBM app, or none if GBM skips MFA), fetches a
+   fresh seed (`GET /security-settings/totp/key`), and — after you confirm — activates it
+   (`POST /security-settings/totp/confirm`), writing it into `auth_gbm.json` without showing it. From then
+   on the scraper generates the codes.
 
-refresh_token = get_provider("gbm").login("you@example.com", "YOUR_PASSWORD", "123456")
-print(refresh_token)  # save this; don't keep the password
-```
+> Use the capture-credentials skill to set up my `gbm` credentials (device id from `captures/gbm.flows`,
+> then take over the TOTP seed).
 
 ```json
-{"refresh_token": "YOUR_REFRESH_TOKEN"}
+{
+  "username": "you@example.com",
+  "password": "YOUR_PASSWORD",
+  "totp_secret": "YOUR_TOTP_SEED",
+  "device_id": "00000000-0000-0000-0000-000000000000"
+}
 ```
 
 **Optional:** `contract_id` (in the file or as a keyword) pins one contract instead of discovering all of
 them. In Python, `location=(lat, lon)` sets the device location GBM's API expects (default: Mexico City).
 
-**Lasts:** each read refreshes the session silently. When GBM expires the refresh token, reads raise
-`SessionExpired`; run `login` again.
+**Lasts:** indefinitely, but GBM is **one active client** — one authorized device, one TOTP seed, one
+session. A scraper read logs the phone app's session out; signing in on the phone bumps the `device_id`
+slot, and re-enrolling the app's authenticator rotates the seed. Any of those makes reads raise
+`SessionExpired` and you re-run setup. For hands-off operation, dedicate the account to the scraper and
+don't use the GBM app's own login/authenticator.
 
-**Careful:** the refresh token is trade-capable. Keep it off shared machines.
+**Careful:** `totp_secret` + `password` is full, trade-capable account access with no second factor left
+(the takeover made the scraper's seed *the* MFA). Keep the file off shared machines.
 
 ## klar
 

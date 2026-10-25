@@ -13,7 +13,7 @@ crypto exchanges. Every institution is used the same way and returns the same `B
 |---|---|---|---|
 | `bitso` | Bitso | ✅ | `api_key`, `api_secret` |
 | `didi` | DiDi Cuenta | ✅ | `token`, `signed_query`, `wsgsig` |
-| `gbm` | GBM+ | ✅ | `refresh_token` |
+| `gbm` | GBM | ✅ | `username`, `password`, `totp_secret`, `device_id` |
 | `klar` | Klar México | ✅ | `private_key_pem`, `device_id`, `username`, `password` |
 | `mercado_pago` | Mercado Pago | ✅ | `token`, `session_id`, `device_id` |
 | `mifel` | Banco Mifel | ✅ | `username`, `password` |
@@ -43,7 +43,7 @@ works the same way; only the auth fields change.
 from finscraper_mx import get_provider
 
 provider = get_provider("bitso")(api_key="…", api_secret="…")
-# provider = get_provider("gbm")(refresh_token="…")
+# provider = get_provider("gbm")(username="…", password="…", totp_secret="…", device_id="…")
 # provider = get_provider("mifel")(username="…", password="…")
 
 for balance in provider.fetch_balances():

@@ -1,6 +1,6 @@
 ---
 name: capture-credentials
-description: Turn the user's own mitmproxy dump (.flows) or .har capture into a finscraper-mx auth_<id>.json (DiDi, Mercado Pago, Plata, Klar, Openbank) without exposing secrets. Use when the user hands over a capture, sets up or renews credentials, or a provider raises SessionExpired. Also has the spec for rebuilding Klar's Remote Config mitmproxy addon (Klar pins, so it has no dump).
+description: Turn the user's own mitmproxy dump (.flows) or .har capture into a finscraper-mx auth_<id>.json (DiDi, Mercado Pago, Plata, Klar, Openbank, GBM) without exposing secrets. Use when the user hands over a capture, sets up or renews credentials, or a provider raises SessionExpired. Also has the spec for rebuilding Klar's Remote Config mitmproxy addon (Klar pins, so it has no dump) and for GBM's TOTP-seed takeover over its API.
 ---
 
 # Get credentials out of a capture
@@ -68,3 +68,39 @@ Then, on the phone: **three-finger press-and-hold** opens the dev menu.
   recent; they should all be the same UUID) and write that UUID as `device_id` into `auth_klar.json`.
   The logs can hold tokens and personal data: search them with a script, print only the match count and a
   redacted UUID, and remind the user to delete them afterwards.
+
+## GBM: device id from a dump, then TAKE OVER the TOTP seed over the API
+
+GBM (`auth.gbm.com`) doesn't pin, so a normal capture works. But `GET /security-settings/totp/key` mints
+a **new** enrollment secret on every call — it is NOT a readout of the active seed, and the app's in-app
+seed is encrypted on the phone. So the only route to a headless seed is to **activate one the scraper
+controls** (a TOTP takeover), which **replaces the account's in-app authenticator**. This modifies the
+user's MFA: **get explicit confirmation first**, and warn that their GBM app's own code generator stops
+working until they re-enroll it — and re-enrolling rotates the seed back and breaks the scraper. Only do
+it if they'll log into GBM through the scraper, not the app.
+
+Collect:
+- `device_id`: from a dump, the `device-mac-address` header on any `auth.gbm.com/api/v1/session/...`
+  request (a UUID; the phone's authorized device). Write it to `auth_gbm.json`.
+- `username`, `password`: typed by the user, never from the dump.
+- `totp_secret`: **activate it.** Run a short script — base `https://auth.gbm.com/api`, mobile headers
+  incl. `device-mac-address: <device_id>`, `clientId=4c392d524cc1460c93c2c2f564c38215`:
+  1. `POST /v1/session/user` with PKCE `codeChallenge` (SHA256 of a `codeVerifier`) + `latitude`/
+     `longitude`. The response is **either** `{authorizationCode}` directly (no MFA this login) **or**
+     `{challengeInfo:{session,timestamp}}`. In the challenge case, ask the user for one current code from
+     their GBM app and `POST /v1/session/user/challenge` (`code`, `codeVerifier`, `session`,
+     `challengeType="SOFTWARE_TOKEN_MFA"`) → `authorizationCode`.
+  2. `POST /v1/session/token` `{clientId, code: authorizationCode, codeVerifier}` → `accessToken`.
+  3. `GET /v1/security-settings/totp/key` (Bearer) → a fresh `secretCode` (base32 seed).
+  4. Generate its TOTP (RFC 6238: base32 → HMAC-SHA1 → 6 digits / 30 s) against GBM **server time**
+     (offset = step-1 `challengeInfo.timestamp` − local ms, or ~0 if absent). **After explicit user YES**,
+     `POST /v2/security-settings/totp/confirm` (Bearer) body
+     `{"code": <that TOTP>, "friendlyDeviceName": "friendlyDeviceName"}` (fall back to `/v1/...` on 4xx).
+     On `{"id":"Success"}` the fetched `secretCode` is now the active seed — write it to `auth_gbm.json`
+     as `totp_secret`. **Never print the seed.**
+
+GBM is **one active client**: one authorized device, one TOTP seed, one session. A read logs the phone
+app out; signing in on the phone bumps `device_id`; re-enrolling the app authenticator rotates the seed —
+any makes reads raise `SessionExpired`, so dedicate the account to the scraper or re-run setup. Final
+file: `{username, password, totp_secret, device_id}` (optional `contract_id`). Verify with
+`finscraper-mx balances gbm --auth auth_gbm.json`.

@@ -17,9 +17,9 @@ balances = provider.fetch_balances()                            # -> list[Balanc
 ```
 
 A provider is a `core.Provider` subclass with `id` (matches the registry key), `name`, `auth_fields`
-(tuple), and `fetch_balances() -> list[Balance]`. Reads always go through `fetch_balances()`. A one-off
-credential helper (e.g. GBM's `login` classmethod) is allowed but is **not** the documented "call" — never
-add provider-specific public read methods or direct-import usage.
+(tuple), and `fetch_balances() -> list[Balance]`. Reads always go through `fetch_balances()`; never add
+provider-specific public read methods or direct-import usage. Credentials are obtained out of band (a
+capture, or the `capture-credentials` skill), never through the provider.
 
 ## Architecture
 
@@ -28,7 +28,7 @@ flowchart TD
   caller["caller / finscraper-mx CLI"] -->|"get_provider(id)(**auth)"| reg["institutions registry<br/>PROVIDERS"]
   reg --> bitso["Bitso<br/>auth: api_key + api_secret"]
   reg --> didi["DiDi Cuenta<br/>auth: token + signed_query + wsgsig<br/>captured signed request, replayed verbatim"]
-  reg --> gbm["GBM+<br/>auth: refresh_token<br/>one-time Gbm.login mints it"]
+  reg --> gbm["GBM<br/>auth: username + password + totp_secret + device_id<br/>headless login, generates its own TOTP"]
   reg --> klar["Klar México<br/>auth: private_key_pem + device_id + username + password<br/>device key captured from paired phone; per-request RSA MFA"]
   reg --> mp["Mercado Pago<br/>auth: token + session_id + device_id<br/>captured from the signed-in app"]
   reg --> mifel["Banco Mifel<br/>auth: username + password<br/>Keycloak password grant"]
@@ -59,7 +59,7 @@ flowchart TD
 |----|-------------|--------------------------|-------------|
 | `bitso` | `api_key`, `api_secret` | official API key (read-only) | per coin |
 | `didi` | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | **mitmproxy capture** of one signed app request, replayed verbatim | Saldo, Mis Ahorros |
-| `gbm` | `refresh_token` | one-time `Gbm.login` (password + TOTP) | per strategy |
+| `gbm` | `username`, `password`, `totp_secret`, `device_id` | headless login; generates its own MFA code from `totp_secret` (seed activated once via a Claude-assisted TOTP takeover; `device_id` from a capture) | per strategy |
 | `klar` | `private_key_pem`, `device_id`, `username`, `password` | mitmproxy Remote Config flag → hidden dev menu shows the device key (Klar pins its hosts) + your login | Cuenta, Ahorro, Depósito en garantía |
 | `mercado_pago` | `token`, `session_id`, `device_id` | **mitmproxy capture** of the app session | Saldo, Apartados, Cripto |
 | `mifel` | `username`, `password` | your login (Keycloak password grant) | accounts + Caja |

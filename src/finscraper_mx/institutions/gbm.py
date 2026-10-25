@@ -1,23 +1,32 @@
-"""GBM+ (GBM México broker), through its own API.
+"""GBM (GBM México broker), through its own API.
 
-Read-only: refreshes a session and reads account values. No order or transfer code.
+Read-only: logs in and reads account values. No order or transfer code.
 
-Standard provider: build it with a `refresh_token` and call `fetch_balances()`, like any other provider.
-It silently refreshes the session, discovers the login's contracts and active strategies (or uses the
-`contract_id`/`accounts` you pass), and raises `SessionExpired` when the refresh token has lapsed.
+Fully headless: build it with `username` + `password` + `totp_secret` + `device_id` and call
+`fetch_balances()`, like any other provider. It logs in on every read, handling both of GBM's login
+shapes — an MFA challenge (answered with a code generated from `totp_secret` against GBM's server
+time) or an authorization code returned directly — then discovers the login's contracts and active
+strategies (or uses the `contract_id`/`accounts` you pass). Raises `AuthRequired` when GBM rejects the
+MFA code and `SessionExpired` when `device_id` is no longer the account's authorized device.
 
-Obtaining the refresh token is a one-time setup, done with the `Gbm.login(user, password, code)` helper
-(GBM requires an MFA code once). GBM's login also needs a device location — pass `location=(lat, lon)`
-(defaults to Mexico City).
+Obtaining `totp_secret` and `device_id` is a one-time setup, done from a capture and with Claude (the
+`capture-credentials` skill), not through the provider: `device_id` is the app's `device-mac-address`,
+and `totp_secret` is a seed *activated* for the account by a TOTP takeover (it replaces the GBM app's
+own authenticator). See `docs/credentials.md#gbm`.
 
-`CLIENT_ID` is GBM's public web client (same for every user). Not affiliated with GBM; automated access
-may be against GBM's terms of use, and the refresh token is trade-capable — keep it off shared hosts.
+GBM is **one active client** — one authorized device, one TOTP seed, one session — so a read logs the
+phone app's session out, and using the phone app (its login or re-enrolling its authenticator) breaks
+the scraper until setup is re-run. `CLIENT_ID` is GBM's public mobile-app client (same for every user).
+Not affiliated with GBM; automated access may be against GBM's terms of use, and a session can place
+trades — keep the credentials off shared hosts.
 """
 from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import os
+import struct
 import time
 from decimal import Decimal, InvalidOperation
 
@@ -25,7 +34,7 @@ import httpx
 
 from ..core import AccountKind, AuthRequired, Balance, LayoutChanged, Provider, SessionExpired
 
-CLIENT_ID = "7c464570619a417080b300076e163289"  # GBM's public web client id (same for every user)
+CLIENT_ID = "4c392d524cc1460c93c2c2f564c38215"  # GBM mobile app ("app-evolution") client id (same for every user)
 AUTH = "https://auth.gbm.com/api/v1"
 APPGBM = "https://api.appgbm.com/v1"
 CONTRACTS_URL = "https://api.appgbm.com/v2/onboarding/contracts"  # lists the login's contracts
@@ -33,23 +42,96 @@ HOMEBROKER = "https://homebroker-api.gbm.com/GBMP/api"
 DEFAULT_LOCATION = (19.4326, -99.1332)  # Mexico City; override per customer with location=(lat, lon)
 CENT = Decimal("0.01")
 
+# Mobile app identity (GBM iOS app); not secrets, the login API expects these headers.
+APP_VERSION = "199"
+USER_AGENT = "GBM/199 CFNetwork/3896.100.1.2.1 Darwin/27.0.0"
+DEVICE_TYPE = "iPhone18,4"
+OS_VERSION = "27.0.1"
+
 
 def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def _client(client: httpx.Client | None, location: tuple[float, float]) -> httpx.Client:
+def _totp(secret: str, when: float | None = None) -> str:
+    """Current 6-digit code for GBM's authenticator seed (RFC 6238: base32 secret, HMAC-SHA1, 30 s)."""
+    secret = secret.strip().replace(" ", "").upper()
+    key = base64.b32decode(secret + "=" * (-len(secret) % 8))
+    counter = int((time.time() if when is None else when) // 30)
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    code = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    return f"{code % 1_000_000:06d}"
+
+
+def _client(client: httpx.Client | None, location: tuple[float, float], device_id: str) -> httpx.Client:
     if client is not None:
         return client
     lat, lon = location
-    headers = {"Content-Type": "application/json", "device-latitude": str(lat), "device-longitude": str(lon)}
+    headers = {
+        "content-type": "application/json; charset=UTF-8",
+        "accept": "application/json, text/plain, */*",
+        "application-name": "app-evolution",
+        "app-version": APP_VERSION,
+        "platform": "iOS",
+        "mobile-platform": "iOS",
+        "device-type": DEVICE_TYPE,
+        "device": DEVICE_TYPE,
+        "os-version": OS_VERSION,
+        "user-agent": USER_AGENT,
+        "device-mac-address": device_id,
+        "device-latitude": str(lat),
+        "device-longitude": str(lon),
+    }
     return httpx.Client(timeout=30, headers=headers)
+
+
+def _login(c: httpx.Client, user: str, password: str, totp_secret: str, location: tuple[float, float]) -> str:
+    """Run GBM's mobile PKCE + SOFTWARE_TOKEN_MFA login and return a fresh access token.
+
+    The MFA code is generated from `totp_secret` against GBM's **server** time (the `timestamp` the
+    challenge step returns), not the local clock, so a skewed host doesn't cause a code mismatch.
+    """
+    lat, lon = location
+    verifier = _b64url(os.urandom(32))
+    challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
+
+    r = c.post(f"{AUTH}/session/user", json={
+        "responseType": "code", "codeChallenge": challenge, "codeChallengeMethod": "SHA256",
+        "longitude": lon, "latitude": lat, "clientId": CLIENT_ID, "user": user, "password": password})
+    if r.status_code >= 400:
+        raise SessionExpired(
+            "gbm: login rejected; device_id may no longer be the account's authorized device "
+            "(the phone app takes the single-device slot when you sign in there) — re-run setup"
+        )
+    body = r.json()
+    if body.get("authorizationCode") and "challengeInfo" not in body:
+        authorization_code = body["authorizationCode"]  # GBM issued the code without an MFA challenge
+    else:
+        info = body["challengeInfo"]
+        server_ms = info.get("timestamp")
+        code = _totp(totp_secret, when=server_ms / 1000 if server_ms else None)
+        r = c.post(f"{AUTH}/session/user/challenge", json={
+            "codeChallengeMethod": "SHA256", "code": code, "clientId": CLIENT_ID, "responseType": "code",
+            "session": info["session"], "codeChallenge": challenge, "codeVerifier": verifier, "user": user,
+            "challengeType": "SOFTWARE_TOKEN_MFA"})
+        if r.status_code >= 400:
+            raise AuthRequired(f"gbm: MFA code rejected: {r.text[:120]}")
+        authorization_code = r.json()["authorizationCode"]
+
+    r = c.post(f"{AUTH}/session/token", json={
+        "clientId": CLIENT_ID, "code": authorization_code, "codeVerifier": verifier})
+    r.raise_for_status()
+    token = r.json().get("accessToken")
+    if not token:
+        raise AuthRequired("gbm: login did not return an access token")
+    return token
 
 
 class Gbm(Provider):
     id = "gbm"
-    name = "GBM+"
-    auth_fields = ("refresh_token",)
+    name = "GBM"
+    auth_fields = ("username", "password", "totp_secret", "device_id")
 
     def __init__(
         self,
@@ -63,10 +145,11 @@ class Gbm(Provider):
         super().__init__(**auth)
         self.accounts = dict(accounts) if accounts else None
         self.contract_id = contract_id
-        self._client = _client(client, location)
+        self._location = location
+        self._client = _client(client, location, self.auth.get("device_id", ""))
 
     def fetch_balances(self) -> list[Balance]:
-        token = self._refresh(self.auth["refresh_token"])
+        token = self._mint()
         accounts = self.accounts if self.accounts is not None else self._list_accounts(token)
         return [
             Balance(self.id, name, AccountKind.INVESTMENT, self._value(token, legacy), "MXN")
@@ -75,13 +158,10 @@ class Gbm(Provider):
 
     # --- internals ---------------------------------------------------------------------------
 
-    def _refresh(self, refresh_token: str) -> str:
-        """Exchange the refresh token for a fresh access token (GBM's own refresh endpoint; no MFA)."""
-        r = self._client.post(f"{AUTH}/session/user/refresh", json={"clientId": CLIENT_ID, "refreshToken": refresh_token})
-        body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        if r.status_code >= 400 or body.get("id") != "Success" or not body.get("accessToken"):
-            raise SessionExpired("gbm: refresh token expired or invalid; get a new one with Gbm.login()")
-        return body["accessToken"]
+    def _mint(self) -> str:
+        """Log in headlessly (MFA code generated from totp_secret), returning a fresh access token."""
+        return _login(self._client, self.auth["username"], self.auth["password"],
+                      self.auth["totp_secret"], self._location)
 
     def _discover_contracts(self, token: str) -> list[str]:
         r = self._client.get(CONTRACTS_URL, headers={"Authorization": "Bearer " + token})
@@ -140,49 +220,3 @@ class Gbm(Provider):
             return Decimal(str(value)).quantize(CENT)
         except InvalidOperation:
             raise LayoutChanged(f"gbm: unexpected marketValueTotal {value!r} for {legacy_contract_id}") from None
-
-    @classmethod
-    def login(
-        cls,
-        user: str,
-        password: str,
-        code: str,
-        *,
-        location: tuple[float, float] = DEFAULT_LOCATION,
-        client: httpx.Client | None = None,
-    ) -> str:
-        """One-time setup: interactive login (password + 6-digit TOTP code). Returns a refresh token."""
-        c = _client(client, location)
-        verifier = _b64url(os.urandom(32))
-        challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
-
-        r = c.post(f"{AUTH}/session/user", json={"clientid": CLIENT_ID, "user": user, "password": password})
-        r.raise_for_status()
-        session = r.json()["challengeInfo"]["session"]
-
-        r = c.post(
-            f"{AUTH}/session/user/challenge",
-            json={
-                "applicationName": "GBM+",
-                "challengeType": "SOFTWARE_TOKEN_MFA",
-                "clientId": CLIENT_ID,
-                "code": code,
-                "codeChallenge": challenge,
-                "codeChallengeMethod": "SHA256",
-                "destination": "iPhone",
-                "responseType": "code",
-                "session": session,
-                "timestamp": int(time.time() * 1000),
-                "user": user,
-            },
-        )
-        if r.status_code >= 400:
-            raise AuthRequired(f"gbm: MFA code rejected: {r.text[:120]}")
-        authorization_code = r.json()["authorizationCode"]
-
-        r = c.post(f"{AUTH}/session/token", json={"clientId": CLIENT_ID, "code": authorization_code, "codeVerifier": verifier})
-        r.raise_for_status()
-        token = r.json()
-        if "refreshToken" not in token:
-            raise AuthRequired("gbm: login did not return a refresh token")
-        return token["refreshToken"]
