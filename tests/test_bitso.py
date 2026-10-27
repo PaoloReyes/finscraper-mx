@@ -65,5 +65,11 @@ def test_asset_with_no_usable_market_fails_loudly():
         provider(client=fake_api(balances=balances, books=["btc_mxn"])).fetch_balances()
 
 
+def test_mxnb_stablecoin_is_valued_one_to_one_without_a_market():
+    balances = [{"currency": "mxnb", "total": "2500.123456"}, {"currency": "btc", "total": "0.001"}]
+    held = {b.account: b.amount for b in provider(client=fake_api(balances=balances)).fetch_balances()}
+    assert held == {"MXNB": Decimal("2500.12"), "BTC": Decimal("2000.00")}
+
+
 def test_signature_is_sent_for_private_calls():
     provider().fetch_balances()  # fake_api asserts the Authorization header shape on /v3/balance/

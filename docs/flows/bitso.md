@@ -36,5 +36,6 @@ sequenceDiagram
 
 One `Balance` per non-zero asset, `kind` `crypto` (MXN itself is `checking`). The amount is the holding
 times its last price, valued in MXN directly when an `asset_mxn` market exists, otherwise bridged through
-the first of `asset_usd` / `asset_usdt` / `asset_btc` that does (each bridge having an MXN market). An
-asset with no path to MXN raises `FinscraperError`.
+the first of `asset_usd` / `asset_usdt` / `asset_btc` that does (each bridge having an MXN market).
+MXNB, the peso stablecoin that Bitso vaults hold, has no MXN market and is valued 1:1 (no ticker call).
+Any other asset with no path to MXN raises `FinscraperError`.

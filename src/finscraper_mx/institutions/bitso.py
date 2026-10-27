@@ -3,7 +3,8 @@
 Reads the account's balance per asset with a read-only API key and values each holding in MXN using
 Bitso's public tickers. Not every asset has a direct MXN market (e.g. ATOM trades only against USD),
 so an asset is valued through the first available market: MXN, then USD, USDT, or BTC — each of those
-bridges itself having an MXN market. The key needs only the permission to read balances.
+bridges itself having an MXN market. Peso stablecoins (MXNB, which Bitso vaults hold) are valued 1:1
+in MXN, since they have no market against the peso. The key needs only the permission to read balances.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from ..core import AccountKind, Balance, FinscraperError, Provider
 BASE_URL = "https://api.bitso.com"
 QUOTE = "mxn"                      # value everything in Mexican pesos
 BRIDGES = ("usd", "usdt", "btc")  # tried in order when there is no direct MXN market
+PEGGED = {"mxnb"}                 # MXN stablecoins, redeemable 1:1 for pesos
 CENT = Decimal("0.01")
 
 
@@ -53,7 +55,7 @@ class Bitso(Provider):
 
     def _price_mxn(self, currency: str) -> Decimal:
         """MXN value of one unit of `currency`, bridging through USD/USDT/BTC when needed."""
-        if currency == QUOTE:
+        if currency == QUOTE or currency in PEGGED:
             return Decimal(1)
         if currency in self._price_cache:
             return self._price_cache[currency]
