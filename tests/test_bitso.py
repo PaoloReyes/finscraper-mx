@@ -1,4 +1,5 @@
 """Bitso provider, against a mocked API. All keys, balances and prices here are fake."""
+import json
 from decimal import Decimal
 
 import httpx
@@ -18,9 +19,24 @@ BALANCES = [
 ]
 
 
-def fake_api(balances=BALANCES, books=BOOKS):
+WALLET = "0x00000000000000000000000000000000000000aa"   # fake vault wallet
+MXNB_VAULT = "0x08cc279532f159bdb450ebc0baf6562f585ded58"
+USDC_VAULT = "0x39e18c066187c83e860801befe45ae8ecd021575"
+MXNB_TOKEN = "0x00000000000000000000000000000000000000bb"
+WITHDRAWALS = [
+    {"currency": "mxnb", "network": "base", "details": {"withdrawal_address": WALLET.upper().replace("0X", "0x")}},
+    {"currency": "mxn", "method": "sp", "details": {"clabe": "000000000000000000"}},  # SPEI: no address
+]
+NO_PERMISSION = {"success": False, "error": {"code": "0202", "message": "API key has no permission"}}
+
+
+def fake_api(balances=BALANCES, books=BOOKS, withdrawals=()):
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        if path == "/v3/withdrawals/":
+            if withdrawals is None:
+                return httpx.Response(403, json=NO_PERMISSION)
+            return httpx.Response(200, json={"success": True, "payload": list(withdrawals)})
         if path == "/v3/available_books/":
             return httpx.Response(200, json={"success": True, "payload": [{"book": b} for b in books]})
         if path == "/v3/balance/":
@@ -36,8 +52,40 @@ def fake_api(balances=BALANCES, books=BOOKS):
     return httpx.Client(transport=httpx.MockTransport(handler), base_url="https://api.bitso.com")
 
 
+def fake_rpc(shares: dict[str, int]):
+    """Base JSON-RPC: `shares` of each vault held by WALLET; 1 share = 2.5 assets; MXNB has 6 decimals."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call = json.loads(request.content)["params"][0]
+        to, data = call["to"].lower(), call["data"]
+        calls.append((to, data[:10]))
+        if data.startswith("0x70a08231"):  # balanceOf(owner)
+            owner = "0x" + data[-40:]
+            value = shares.get(to, 0) if owner == WALLET else 0
+        elif data.startswith("0x07a2d13a"):  # convertToAssets(shares)
+            value = int(data[10:], 16) * 5 // 2
+        elif data.startswith("0x38d52e0f"):  # asset()
+            value = int(MXNB_TOKEN, 16)
+        elif data.startswith("0x313ce567") and to == MXNB_TOKEN:  # decimals()
+            value = 6
+        else:
+            return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "error": {"message": "revert"}})
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": f"0x{value:064x}"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    client.calls = calls
+    return client
+
+
 def provider(**over):
-    return Bitso(api_key="key", api_secret="secret", client=over.get("client", fake_api()))
+    return Bitso(
+        api_key="key",
+        api_secret="secret",
+        client=over.get("client", fake_api()),
+        rpc_client=over.get("rpc_client", fake_rpc({})),
+        **({"vault_address": over["vault_address"]} if "vault_address" in over else {}),
+    )
 
 
 def test_values_assets_in_mxn_and_skips_zero():
@@ -73,3 +121,32 @@ def test_mxnb_stablecoin_is_valued_one_to_one_without_a_market():
 
 def test_signature_is_sent_for_private_calls():
     provider().fetch_balances()  # fake_api asserts the Authorization header shape on /v3/balance/
+
+
+def test_reads_vault_found_through_base_withdrawals():
+    rpc = fake_rpc({MXNB_VAULT: 4_000_000_000})  # 4,000 shares (6 decimals here) -> 10,000 MXNB
+    balances = {b.account: b for b in provider(client=fake_api(withdrawals=WITHDRAWALS), rpc_client=rpc).fetch_balances()}
+    vault = balances["Bóveda MXNB"]
+    assert vault.amount == Decimal("10000.00")
+    assert vault.kind is AccountKind.INVESTMENT and vault.currency == "MXN"
+    assert "Bóveda USDC" not in balances  # no shares: skipped
+    assert balances["MXN"].amount == Decimal("1500.00")  # regular holdings still there
+
+
+def test_vault_address_can_be_given():
+    rpc = fake_rpc({MXNB_VAULT: 400_000})
+    balances = provider(client=fake_api(withdrawals=None), rpc_client=rpc, vault_address=WALLET).fetch_balances()
+    assert next(b for b in balances if b.account == "Bóveda MXNB").amount == Decimal("1.00")
+
+
+def test_vaults_skipped_when_key_cannot_see_withdrawals():
+    rpc = fake_rpc({MXNB_VAULT: 4_000_000_000})
+    accounts = {b.account for b in provider(client=fake_api(withdrawals=None), rpc_client=rpc).fetch_balances()}
+    assert accounts == {"MXN", "BTC", "ATOM"}
+    assert rpc.calls == []  # no wallet, no on-chain reads
+
+
+def test_no_base_withdrawals_means_no_vault_reads():
+    rpc = fake_rpc({})
+    provider(client=fake_api(withdrawals=WITHDRAWALS[1:]), rpc_client=rpc).fetch_balances()
+    assert rpc.calls == []

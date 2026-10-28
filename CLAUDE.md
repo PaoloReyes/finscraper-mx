@@ -35,7 +35,7 @@ flowchart TD
   reg --> ob["Openbank México<br/>auth: username + password + device_uuid<br/>Keycloak-style login + gp-exp global position"]
   reg --> plata["Plata<br/>auth: auth_request + installation_id<br/>capture Auth call from proxy; replayed to mint a session token"]
   reg --> skandia["Skandia México<br/>auth: username + password<br/>mobile app API"]
-  bitso -->|"httpx"| bapi[("api.bitso.com")]
+  bitso -->|"httpx"| bapi[("api.bitso.com · Base RPC (vaults)")]
   didi -->|"httpx"| dapi[("wallet.didipay.com/sofipo")]
   gbm -->|"httpx"| gapi[("auth.gbm.com · appgbm · homebroker")]
   klar -->|"httpx + cryptography"| kapi[("api.klar.mx (Keycloak login + MFA-gated reads)")]
@@ -57,7 +57,7 @@ flowchart TD
 
 | id | auth fields | how the auth is obtained | reads (MXN) |
 |----|-------------|--------------------------|-------------|
-| `bitso` | `api_key`, `api_secret` | official API key (read-only) | per coin |
+| `bitso` | `api_key`, `api_secret` | official API key (read-only) | per coin + Bóvedas (on-chain) |
 | `didi` | `token`, `signed_query`, `wsgsig` (+ `secdd_*`, `oid`, `rid`) | **mitmproxy capture** of one signed app request, replayed verbatim | Saldo, Mis Ahorros |
 | `gbm` | `username`, `password`, `totp_secret`, `device_id` | headless login; generates its own MFA code from `totp_secret` (seed activated once via a Claude-assisted TOTP takeover; `device_id` from a capture) | per strategy |
 | `klar` | `private_key_pem`, `device_id`, `username`, `password` | mitmproxy Remote Config flag → hidden dev menu shows the device key (Klar pins its hosts) + your login | Cuenta, Ahorro, Depósito en garantía |

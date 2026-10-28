@@ -138,16 +138,22 @@ these steps for that app.
 
 ## bitso
 
-**Fields:** `api_key`, `api_secret`. This is Bitso's official API, so nothing is captured.
+**Fields:** `api_key`, `api_secret`; optionally `vault_address`. This is Bitso's official API, so nothing
+is captured.
 
 1. On bitso.com, open your profile → **API** → add a new API key.
-2. Give it **only the permission to view balances**. The provider never trades or withdraws, so the key
-   shouldn't be able to either.
+2. Give it only **Mostrar balances** and, if you use Bitso Vaults (Bóvedas), **Ver información de
+   cuenta**. That lets the provider list your withdrawals to find the vault wallet. The provider never
+   trades or withdraws, so leave "Colocar órdenes" and "Realizar retiros" off.
 3. Copy the key and the secret (the secret is shown once).
 
 ```json
 {"api_key": "YOUR_API_KEY", "api_secret": "YOUR_API_SECRET"}
 ```
+
+Instead of "Ver información de cuenta", you can add `"vault_address": "0xYOUR_VAULT_WALLET"`: the Base
+address your vault deposits went to (shown as the withdrawal address of the move into Bóvedas). It's a
+public address, not a secret. See [`docs/flows/bitso.md`](flows/bitso.md#vaults-bóvedas).
 
 **Lasts:** until you revoke the key on Bitso.
 
