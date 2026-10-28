@@ -153,7 +153,9 @@ is captured.
 
 Instead of "Ver información de cuenta", you can add `"vault_address": "0xYOUR_VAULT_WALLET"`: the Base
 address your vault deposits went to (shown as the withdrawal address of the move into Bóvedas). It's a
-public address, not a secret. See [`docs/flows/bitso.md`](flows/bitso.md#vaults-bóvedas).
+public address, not a secret. Add it to every copy of the auth file (e.g. your server's too): without it
+or the permission, vaults are skipped without an error. Known limits, like new vaults not being picked up
+automatically, are under [Caveats in `docs/flows/bitso.md`](flows/bitso.md#caveats).
 
 **Lasts:** until you revoke the key on Bitso.
 

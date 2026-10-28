@@ -64,4 +64,23 @@ The provider takes the wallet from `vault_address`, or else from the destination
 withdrawals, reads its vault shares with `balanceOf`, and converts them with `convertToAssets`, so the
 amount includes the interest earned. Each position is one `Balance` named `Bóveda MXNB` / `Bóveda USDC`,
 `kind` `investment`. If the key can't list withdrawals (error `0202`) and no `vault_address` is given,
-vaults are skipped. A new Bitso vault needs its contract added to `VAULTS`.
+vaults are skipped.
+
+### Caveats
+
+- **The vault list is fixed.** Only the contracts in `VAULTS` are read. If Bitso launches another vault,
+  it is **missed without any error** until its contract is added there (one line). The symptom is the
+  provider's Bitso total coming up short of the app's total. Discovering vaults through Morpho's public
+  API was considered (2026-10-28) and deferred while Bitso has only these two; revisit if more appear.
+- **Vaults are skipped silently** when the key lacks "Ver información de cuenta" and no `vault_address` is
+  given. Check for the `Bóveda …` lines after changing the key or moving the auth file to a new machine.
+- **Wallet discovery looks at the last 100 withdrawals.** If the move into Bóvedas is older than that, the
+  wallet isn't found; set `vault_address` to make it permanent.
+- **Every Base withdrawal address is checked.** Discovery can't tell the vault wallet from another Base
+  wallet you sent coins to; a wallet only counts if it holds shares of a Bitso vault, so in practice this
+  only adds harmless extra reads.
+- **It depends on a public Base node** (`mainnet.base.org`, rate-limited). If it's down or throttling, the
+  fetch fails with a `FinscraperError`; pass `base_rpc=` to use another node.
+- **USDC vault positions are valued through Bitso's `usd_mxn` ticker**, like other USD holdings; MXNB is 1:1.
+- **Amounts include interest** (shares × current share price), so they move a little between runs and can
+  differ from the app by centavos.
