@@ -41,7 +41,7 @@ sequenceDiagram
   C->>P: fetch_balances()
   P->>S: POST /sofipo/uchome/v0/main?signed_query (captured headers + wsgsig, replayed verbatim)
   alt rejected or stale signature
-    S-->>P: HTTP 401/403, errno not 0, or errno 0 with empty data
+    S-->>P: HTTP 401/403/500, errno not 0, or errno 0 with empty data
     P-->>C: SessionExpired
   else signed in
     S-->>P: home JSON with data.content.cardList
@@ -67,3 +67,5 @@ The balance arrives as a display string (e.g. `10,058.37`); the provider strips 
 - `wsgsig`/`secdd` are request-bound and short-lived: a captured signature only validates its own request,
   and a rebuilt request returns `errno 0` with empty `data`. The provider therefore replays the captured
   `signed_query` and signature verbatim; recapture when a read raises `SessionExpired`.
+- HTTP 500 is what DiDi answers a replay it can't verify: fields mixed from two captures, a JSON header or
+  body pasted with escaped quotes, or a lapsed signature. It raises `SessionExpired`; recapture all fields together.

@@ -117,6 +117,11 @@ class Didi(Provider):
         )
         if response.status_code in (401, 403):
             raise SessionExpired("didi: token rejected; recapture a fresh signed request from your signed-in app")
+        if response.status_code == 500:
+            # What DiDi answers a replay it can't verify: values from two different captures mixed together,
+            # a JSON header or body pasted with escaped quotes, or a signature that already lapsed.
+            raise SessionExpired("didi: HTTP 500, DiDi rejected the replayed request; recapture every field together "
+                                 "from one fresh request (don't mix values from an older capture)")
         response.raise_for_status()
         try:
             payload = response.json()

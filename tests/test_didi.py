@@ -83,6 +83,12 @@ def test_rejected_token_is_session_expired():
         provider(fake_app(status=401)).fetch_balances()
 
 
+def test_server_error_on_a_replay_is_session_expired():
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500, text="")), base_url="https://wallet.didipay.com")
+    with pytest.raises(SessionExpired, match="one fresh request"):
+        provider(client).fetch_balances()
+
+
 def test_nonzero_errno_is_session_expired():
     with pytest.raises(SessionExpired, match="recapture"):
         provider(fake_app(home(errno=101016, errmsg="token invalid"))).fetch_balances()
