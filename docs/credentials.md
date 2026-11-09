@@ -194,6 +194,17 @@ for. So the provider never logs in; it resends one captured request exactly as t
 If your capture's headers or body differ from the provider's defaults, also pass `sofi_hint` (the full
 `sofi-header-hint-content` header), `didi_hint` (`didi-header-hint-content`) or `body` (the JSON body).
 
+**What changes when you recapture, and what doesn't.** `wsgsig` signs the exact `signed_query` and body,
+and `secdd_authentication`, `secdd_challenge`, `oid` and `rid` belong to that same request — so these are
+recaptured **together, as one set**, from a single fresh `uchome/v0/main`; you can't freshen one on its
+own. `token` is the session itself (and `sofi_hint` carries it), so both change when the session does —
+this is the part that actually expires. `didi_hint` (app constants) and `body` (the fixed home request)
+stay the same across captures: leave them at the provider's defaults unless the app version changes.
+
+Opening the DiDi app on your phone can start a new session and end the one the server was replaying, so
+recapture after any manual use of the app. There is no headless login: the app's sign-in just Face-ID
+unlocks a token stored on the device — no server call mints a session the library could repeat.
+
 **Lasts:** the shortest of any provider. When a read raises `SessionExpired`, capture a fresh request.
 
 ## gbm
