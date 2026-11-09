@@ -36,7 +36,7 @@ finscraper-mx balances klar --auth auth_klar.json   # prints the balances as JSO
 ```
 
 The CLI passes every key in the file to the provider, so the same file can also hold a provider's optional
-values (such as `proxy` for Klar and Openbank, or `contract_id` for GBM).
+values (such as `proxy` for Klar, Openbank and DiDi, or `contract_id` for GBM).
 
 From Python, load the file and unpack it:
 

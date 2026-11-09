@@ -69,3 +69,5 @@ The balance arrives as a display string (e.g. `10,058.37`); the provider strips 
   `signed_query` and signature verbatim; recapture when a read raises `SessionExpired`.
 - HTTP 500 is what DiDi answers a replay it can't verify: fields mixed from two captures, a JSON header or
   body pasted with escaped quotes, or a lapsed signature. It raises `SessionExpired`; recapture all fields together.
+- An optional `proxy` auth value (`http://host:port`, e.g. a Cloudflare WARP proxy) routes this provider's
+  calls, for running off a datacenter IP.

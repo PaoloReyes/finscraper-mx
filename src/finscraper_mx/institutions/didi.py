@@ -12,7 +12,8 @@ provider never logs in and never rebuilds the request — it **replays the captu
 verbatim**. The caller captures their own signed-in session (e.g. a mitmproxy capture of the app) and
 passes the pieces it yields: the session `token`, the exact captured query string (`signed_query`) and
 the `wsgsig`, plus the `secdd_authentication`, `secdd_challenge`, `oid` and `rid` the app sent with it.
-`sofi_hint`, `didi_hint` and `body` may be overridden if the capture differs from the defaults.
+`sofi_hint`, `didi_hint` and `body` may be overridden if the capture differs from the defaults, and an
+optional `proxy` URL (e.g. ``http://warp:1080``) routes this provider's calls, e.g. off a datacenter IP.
 
 Because the signature is request-bound and short-lived, the capture works only until DiDi expires the
 session or the signature; recapture when a read raises `SessionExpired`. Reverse-engineered and
@@ -67,7 +68,7 @@ class Didi(Provider):
         **auth: str,
     ) -> None:
         super().__init__(**auth)
-        self._client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=30)
+        self._client = client or httpx.Client(base_url=base_url.rstrip("/"), timeout=30, proxy=self.auth.get("proxy") or None)
         self._headers = {
             "User-Agent": user_agent,
             "Content-Type": "application/json",

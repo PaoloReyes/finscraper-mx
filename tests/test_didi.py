@@ -105,3 +105,8 @@ def test_no_balance_cards_is_layout_changed():
     cards = [card("cnbv", "¡Hola, Fulano!"), card("banner", "Más promociones")]
     with pytest.raises(LayoutChanged):
         provider(fake_app(home(cards))).fetch_balances()
+
+
+def test_optional_proxy_routes_the_client():
+    proxied = get_provider("didi")(**AUTH, proxy="http://127.0.0.1:8899")
+    assert any(str(t._pool._proxy_url.origin) == "http://127.0.0.1:8899" for t in proxied._client._mounts.values())
