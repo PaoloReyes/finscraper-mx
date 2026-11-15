@@ -88,7 +88,7 @@ are debit + investment only) but its shape is kept here so it is easy to re-add.
 
 **Plata Acciones (brokerage).** `InvestWidgetsService/GetInvestPlatformMainWidgets` (empty request) returns
 the portfolio; its total is a `Money` at `f1 → f1 → f1 → f3`, in **USD**. To keep every balance in MXN the
-provider converts it at Google Finance's live USD/MXN rate (`google.com/finance/quote/USD-MXN`). Pass
+provider converts it at Google Finance's live USD/MXN rate (`google.com/finance/quote/USD-MXN`), read only from the pair's quote entry in the page's `AF_initDataCallback` data (`"USD / MXN",3,null,[<price>,…]`, every copy must agree) and refused outside 10-35. The blocks come in a different order on each load, so no other number on the page (e.g. the Dow's daily change, ~50) may be taken for the rate. Pass
 `usd_mxn_rate=` to override the rate (and to avoid the network, as the tests do).
 
 ## Notes

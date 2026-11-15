@@ -9,7 +9,8 @@ session token on each run, then reads the Cuenta and savings/investment pockets
 from ``AccountService/GetAccounts`` and the Plata Acciones brokerage portfolio
 from ``InvestWidgetsService/GetInvestPlatformMainWidgets``. Everything is reported
 in MXN; the Acciones portfolio is natively in USD and is converted at Google
-Finance's live USD/MXN rate (overridable via ``usd_mxn_rate``).
+Finance's live USD/MXN rate (overridable via ``usd_mxn_rate``), read from the
+pair's quote entry in the page data and refused unless it lies within 10-35.
 
 Auth fields
 -----------
@@ -197,6 +198,35 @@ def _balance_with_interest(
     if interest_field in body:
         total += _money(body[interest_field][0])
     return total
+
+
+# USD/MXN has stayed well inside this band for decades; anything outside it is a
+# misread of the page (e.g. the Dow Jones daily change, ~50, which Google Finance
+# lists near the pair title), not a rate, and must never price a balance.
+_USD_MXN_MIN, _USD_MXN_MAX = Decimal("10"), Decimal("35")
+
+
+def _plausible(rate: Decimal) -> bool:
+    return _USD_MXN_MIN < rate < _USD_MXN_MAX
+
+
+def _parse_usd_mxn(html: str) -> Decimal | None:
+    """The live USD/MXN rate from a Google Finance quote page, or None.
+
+    The page embeds its data as ``AF_initDataCallback`` blocks whose order changes
+    from load to load. The pair's quote entry is the same in each block that
+    carries it: ``"USD / MXN",3,null,[<price>,<change>,<change %>,...]``. Only
+    that entry is read, every copy must agree, and the rate must be plausible.
+    Taking "the first NN.NN after the title" instead used to grab the Dow's daily
+    change (~50) whenever its block came next, pricing Plata Acciones at almost 3x.
+    """
+    rates = {
+        Decimal(m) for m in re.findall(r'"USD / MXN",3,null,\[([0-9]+(?:\.[0-9]+)?),', html)
+    }
+    if len(rates) != 1:
+        return None
+    rate = rates.pop()
+    return rate if _plausible(rate) else None
 
 
 def _label(body: dict[int, list], number: bytes) -> str:
@@ -427,13 +457,9 @@ class Plata(Provider):
             follow_redirects=True,
         )
         resp.raise_for_status()
-        # the live quote is the first FX-magnitude number after the pair title
-        match = re.search(r'"USD / MXN".{0,600}?,([1-9]\d\.\d{2,}),', resp.text, re.S)
-        if not match:
+        rate = _parse_usd_mxn(resp.text)
+        if rate is None:
             raise LayoutChanged("plata: could not read USD->MXN rate from Google Finance")
-        rate = Decimal(match.group(1))
-        if not (Decimal("1") < rate < Decimal("1000")):
-            raise LayoutChanged(f"plata: implausible USD->MXN rate {rate}")
         return rate
 
     def _account_balances(self, envelope: bytes) -> list[Balance]:
