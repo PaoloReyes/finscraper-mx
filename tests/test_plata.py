@@ -250,27 +250,40 @@ def test_rejected_token_is_session_expired():
         build(client=client).fetch_balances()
 
 
-# --- USD/MXN rate parsing ----------------------------------------------------
+# --- USD/MXN rate ------------------------------------------------------------
 
-from finscraper_mx.institutions.plata import _parse_usd_mxn  # noqa: E402
-
-_DOW = '[".DJI","INDEXDJX"],"Dow Jones Industrial Average",1,null,[52347.55,50.460938,0.1,2]'
-_QUOTE = (
-    '["/g/11bvvzcw3l",null,"USD / MXN",3,null,[18.5365,0,0,4,4,2],null,18.5365,null,'
-    'null,null,[1794736320],null,0,"/g/11bvvzcw3l",["USD","MXN"],"USD-MXN",null,null,2]'
-)
+from finscraper_mx.institutions import plata as plata_mod  # noqa: E402
 
 
-def test_rate_read_from_the_usd_mxn_quote_entry():
-    # title div first, then the Dow's block, then the quote: the old scrape took 50.460938
-    page = f'<div>"USD / MXN"</div> {_DOW} {_QUOTE} ,null,0,18.5365,"USD / MXN",60,3 {_QUOTE}'
-    assert _parse_usd_mxn(page) == Decimal("18.5365")
+def _fx(monkeypatch, answers):
+    calls = []
+
+    def fake_get(url, **kw):
+        calls.append(url)
+        answer = answers[len(calls) - 1]
+        if isinstance(answer, Exception):
+            raise answer
+        return httpx.Response(200, json=answer, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(plata_mod.httpx, "get", fake_get)
+    return calls
 
 
-def test_rate_missing_or_disagreeing_is_refused():
-    assert _parse_usd_mxn(f'<div>"USD / MXN"</div> {_DOW} ,18.39,') is None
-    assert _parse_usd_mxn(_QUOTE + _QUOTE.replace("[18.5365,", "[18.9,")) is None
+def _bare():
+    p = object.__new__(plata_mod.Plata)
+    p._usd_mxn_rate = None
+    return p
 
 
-def test_implausible_rate_is_refused():
-    assert _parse_usd_mxn(_QUOTE.replace("[18.5365,", "[50.460938,")) is None
+def test_rate_is_the_days_reference_rate(monkeypatch):
+    calls = _fx(monkeypatch, [{"rates": {"MXN": 18.593}}])
+    assert _bare()._usd_to_mxn() == Decimal("18.593")
+    assert "frankfurter" in calls[0]
+
+
+def test_rate_falls_back_and_refuses_implausible(monkeypatch):
+    _fx(monkeypatch, [httpx.ConnectError("down"), {"rates": {"MXN": 18.55}}])
+    assert _bare()._usd_to_mxn() == Decimal("18.55")
+    _fx(monkeypatch, [{"rates": {"MXN": 50.46}}, {"rates": {}}])
+    with pytest.raises(LayoutChanged):
+        _bare()._usd_to_mxn()

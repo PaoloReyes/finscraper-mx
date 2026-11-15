@@ -8,9 +8,9 @@ this provider **replays the captured Auth request verbatim** to mint a fresh
 session token on each run, then reads the Cuenta and savings/investment pockets
 from ``AccountService/GetAccounts`` and the Plata Acciones brokerage portfolio
 from ``InvestWidgetsService/GetInvestPlatformMainWidgets``. Everything is reported
-in MXN; the Acciones portfolio is natively in USD and is converted at Google
-Finance's live USD/MXN rate (overridable via ``usd_mxn_rate``), read from the
-pair's quote entry in the page data and refused unless it lies within 10-35.
+in MXN; the Acciones portfolio is natively in USD and is converted at the
+day's USD/MXN reference rate (ECB via Frankfurter, open.er-api.com as fallback;
+overridable via ``usd_mxn_rate``), refused unless it lies within 10-35.
 
 Auth fields
 -----------
@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import base64
 import os
-import re
 import uuid
 import warnings
 from decimal import Decimal
@@ -82,12 +81,14 @@ _USER_AGENT = f"ios/{_APP_VERSION} grpc"
 _DEVICE_MODEL = "iPhone 17 Air"  # cosmetic telemetry; some gateways want it present
 _GRPC_TIMEOUT = "30000000u"      # 30s client deadline; the invest gateway requires it
 
-# Plata Acciones is a USD brokerage; its balance is converted to MXN at read time
-# using Google Finance's live USD/MXN rate (the caller can override the rate).
-_GOOGLE_FX_URL = "https://www.google.com/finance/quote/USD-MXN"
-_BROWSER_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+# Plata Acciones is a USD brokerage; its balance is converted to MXN at read time at
+# the day's USD/MXN reference rate (the ECB's, via Frankfurter; open.er-api.com if
+# that is down). One rate per day keeps the converted value steady: a live quote
+# made it zigzag between reads, and scraping one (Google Finance) misread it.
+# The caller can override the rate.
+_FX_SOURCES = (
+    ("https://api.frankfurter.dev/v1/latest?from=USD&to=MXN", lambda j: j["rates"]["MXN"]),
+    ("https://open.er-api.com/v6/latest/USD", lambda j: j["rates"]["MXN"]),
 )
 
 CENT = Decimal("0.01")
@@ -200,33 +201,9 @@ def _balance_with_interest(
     return total
 
 
-# USD/MXN has stayed well inside this band for decades; anything outside it is a
-# misread of the page (e.g. the Dow Jones daily change, ~50, which Google Finance
-# lists near the pair title), not a rate, and must never price a balance.
+# USD/MXN has stayed well inside this band for decades; anything outside it is not
+# a rate and must never price a balance.
 _USD_MXN_MIN, _USD_MXN_MAX = Decimal("10"), Decimal("35")
-
-
-def _plausible(rate: Decimal) -> bool:
-    return _USD_MXN_MIN < rate < _USD_MXN_MAX
-
-
-def _parse_usd_mxn(html: str) -> Decimal | None:
-    """The live USD/MXN rate from a Google Finance quote page, or None.
-
-    The page embeds its data as ``AF_initDataCallback`` blocks whose order changes
-    from load to load. The pair's quote entry is the same in each block that
-    carries it: ``"USD / MXN",3,null,[<price>,<change>,<change %>,...]``. Only
-    that entry is read, every copy must agree, and the rate must be plausible.
-    Taking "the first NN.NN after the title" instead used to grab the Dow's daily
-    change (~50) whenever its block came next, pricing Plata Acciones at almost 3x.
-    """
-    rates = {
-        Decimal(m) for m in re.findall(r'"USD / MXN",3,null,\[([0-9]+(?:\.[0-9]+)?),', html)
-    }
-    if len(rates) != 1:
-        return None
-    rate = rates.pop()
-    return rate if _plausible(rate) else None
 
 
 def _label(body: dict[int, list], number: bytes) -> str:
@@ -295,7 +272,7 @@ class Plata(Provider):
 
         Returns the debit Cuenta and the savings/investment pockets (principal +
         accrued interest) plus, when reachable, the Plata Acciones brokerage
-        portfolio (its USD value converted to MXN at Google's live rate). All
+        portfolio (its USD value converted to MXN at the day's reference rate). All
         amounts are in MXN.
 
         The Plata Acciones read is wrapped **best-effort**: the brokerage widget
@@ -433,7 +410,7 @@ class Plata(Provider):
             ) from exc
         currency = _parse_message(value_raw).get(1, [b"USD"])[0].decode("ascii", "ignore")
         amount = _money(value_raw)
-        if currency == "USD":  # convert to MXN at Google's live rate
+        if currency == "USD":  # convert to MXN at the day's reference rate
             amount = (amount * self._usd_to_mxn()).quantize(CENT)
             currency = "MXN"
         return [
@@ -447,20 +424,22 @@ class Plata(Provider):
         ]
 
     def _usd_to_mxn(self) -> Decimal:
-        """Current USD->MXN rate from Google Finance (or the caller's override)."""
+        """The day's USD->MXN reference rate (or the caller's override)."""
         if self._usd_mxn_rate is not None:
             return self._usd_mxn_rate
-        resp = httpx.get(
-            _GOOGLE_FX_URL,
-            headers={"User-Agent": _BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"},
-            timeout=15,
-            follow_redirects=True,
-        )
-        resp.raise_for_status()
-        rate = _parse_usd_mxn(resp.text)
-        if rate is None:
-            raise LayoutChanged("plata: could not read USD->MXN rate from Google Finance")
-        return rate
+        problems = []
+        for url, parse in _FX_SOURCES:
+            try:
+                resp = httpx.get(url, timeout=15, follow_redirects=True)
+                resp.raise_for_status()
+                rate = Decimal(str(parse(resp.json())))
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                problems.append(f"{url}: {exc}")
+                continue
+            if _USD_MXN_MIN < rate < _USD_MXN_MAX:
+                return rate
+            problems.append(f"{url}: implausible rate {rate}")
+        raise LayoutChanged("plata: no USD->MXN rate (" + "; ".join(problems) + ")")
 
     def _account_balances(self, envelope: bytes) -> list[Balance]:
         env = _parse_message(envelope)
