@@ -47,7 +47,7 @@ sequenceDiagram
   participant C as caller
   participant P as Plata provider
   participant S as prime.platacard.mx
-  participant G as Frankfurter (ECB)
+  participant G as Bitso ticker
 
   C->>P: get_provider("plata")(auth_request, installation_id)
   C->>P: fetch_balances()
@@ -63,8 +63,8 @@ sequenceDiagram
   end
   P->>S: POST InvestWidgetsService/GetInvestPlatformMainWidgets
   S-->>P: Plata Acciones portfolio value in USD
-  P->>G: GET api.frankfurter.dev/v1/latest (open.er-api.com if down)
-  G-->>P: the day's USD/MXN reference rate
+  P->>G: GET api.bitso.com/v3/ticker/?book=usd_mxn (Frankfurter ECB if down)
+  G-->>P: live USD/MXN rate
   Note over P: Acciones USD value x rate to MXN
   P-->>C: list of Balance, all in MXN
 ```
@@ -88,7 +88,7 @@ are debit + investment only) but its shape is kept here so it is easy to re-add.
 
 **Plata Acciones (brokerage).** `InvestWidgetsService/GetInvestPlatformMainWidgets` (empty request) returns
 the portfolio; its total is a `Money` at `f1 → f1 → f1 → f3`, in **USD**. To keep every balance in MXN the
-provider converts it at the day's USD/MXN reference rate: the ECB's, from Frankfurter (`api.frankfurter.dev/v1/latest`), with open.er-api.com as a fallback, refused outside 10-35. One rate per day keeps the converted value steady between reads; Google Finance's live quote, scraped before, made it zigzag and was sometimes misread (the Dow's daily change taken for the rate). Pass
+provider converts it at the live USD/MXN rate from Bitso's public ticker (`api.bitso.com/v3/ticker/?book=usd_mxn`, JSON), with the day's ECB rate from Frankfurter as a fallback, refused outside 10-35. Google Finance's quote page, scraped before, was sometimes misread (the Dow's daily change taken for the rate). Pass
 `usd_mxn_rate=` to override the rate (and to avoid the network, as the tests do).
 
 ## Notes

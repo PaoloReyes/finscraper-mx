@@ -9,7 +9,7 @@ session token on each run, then reads the Cuenta and savings/investment pockets
 from ``AccountService/GetAccounts`` and the Plata Acciones brokerage portfolio
 from ``InvestWidgetsService/GetInvestPlatformMainWidgets``. Everything is reported
 in MXN; the Acciones portfolio is natively in USD and is converted at the
-day's USD/MXN reference rate (ECB via Frankfurter, open.er-api.com as fallback;
+live USD/MXN rate (Bitso's usd_mxn ticker; the ECB's via Frankfurter as fallback;
 overridable via ``usd_mxn_rate``), refused unless it lies within 10-35.
 
 Auth fields
@@ -82,13 +82,12 @@ _DEVICE_MODEL = "iPhone 17 Air"  # cosmetic telemetry; some gateways want it pre
 _GRPC_TIMEOUT = "30000000u"      # 30s client deadline; the invest gateway requires it
 
 # Plata Acciones is a USD brokerage; its balance is converted to MXN at read time at
-# the day's USD/MXN reference rate (the ECB's, via Frankfurter; open.er-api.com if
-# that is down). One rate per day keeps the converted value steady: a live quote
-# made it zigzag between reads, and scraping one (Google Finance) misread it.
-# The caller can override the rate.
+# the live USD/MXN rate: Bitso's public usd_mxn ticker (a JSON API, nothing to scrape:
+# scraping Google Finance's page misread the rate), or the day's ECB reference rate
+# (Frankfurter) if Bitso is down. The caller can override the rate.
 _FX_SOURCES = (
+    ("https://api.bitso.com/v3/ticker/?book=usd_mxn", lambda j: j["payload"]["last"]),
     ("https://api.frankfurter.dev/v1/latest?from=USD&to=MXN", lambda j: j["rates"]["MXN"]),
-    ("https://open.er-api.com/v6/latest/USD", lambda j: j["rates"]["MXN"]),
 )
 
 CENT = Decimal("0.01")
@@ -272,7 +271,7 @@ class Plata(Provider):
 
         Returns the debit Cuenta and the savings/investment pockets (principal +
         accrued interest) plus, when reachable, the Plata Acciones brokerage
-        portfolio (its USD value converted to MXN at the day's reference rate). All
+        portfolio (its USD value converted to MXN at the live rate). All
         amounts are in MXN.
 
         The Plata Acciones read is wrapped **best-effort**: the brokerage widget
@@ -410,7 +409,7 @@ class Plata(Provider):
             ) from exc
         currency = _parse_message(value_raw).get(1, [b"USD"])[0].decode("ascii", "ignore")
         amount = _money(value_raw)
-        if currency == "USD":  # convert to MXN at the day's reference rate
+        if currency == "USD":  # convert to MXN at the live rate
             amount = (amount * self._usd_to_mxn()).quantize(CENT)
             currency = "MXN"
         return [
@@ -424,7 +423,7 @@ class Plata(Provider):
         ]
 
     def _usd_to_mxn(self) -> Decimal:
-        """The day's USD->MXN reference rate (or the caller's override)."""
+        """Live USD->MXN rate from Bitso, else the ECB's (or the caller's override)."""
         if self._usd_mxn_rate is not None:
             return self._usd_mxn_rate
         problems = []

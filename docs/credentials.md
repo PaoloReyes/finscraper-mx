@@ -393,7 +393,7 @@ The body is binary, so don't copy it by hand: save a `.flows` dump and ask Claud
 when Plata rotates the device key (logging out, reinstalling or switching phones); then reads raise
 `SessionExpired` and you capture again.
 
-**Note:** Plata Acciones is held in USD and converted to MXN at the day's ECB reference rate (Frankfurter, open.er-api.com as fallback). In Python,
+**Note:** Plata Acciones is held in USD and converted to MXN at the live rate from Bitso's public usd_mxn ticker (the ECB's via Frankfurter as fallback). In Python,
 `usd_mxn_rate=` fixes the rate instead.
 
 ## skandia

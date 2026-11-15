@@ -275,15 +275,15 @@ def _bare():
     return p
 
 
-def test_rate_is_the_days_reference_rate(monkeypatch):
-    calls = _fx(monkeypatch, [{"rates": {"MXN": 18.593}}])
-    assert _bare()._usd_to_mxn() == Decimal("18.593")
-    assert "frankfurter" in calls[0]
+def test_rate_is_bitsos_live_rate(monkeypatch):
+    calls = _fx(monkeypatch, [{"success": True, "payload": {"last": "18.5512"}}])
+    assert _bare()._usd_to_mxn() == Decimal("18.5512")
+    assert "bitso" in calls[0]
 
 
 def test_rate_falls_back_and_refuses_implausible(monkeypatch):
     _fx(monkeypatch, [httpx.ConnectError("down"), {"rates": {"MXN": 18.55}}])
     assert _bare()._usd_to_mxn() == Decimal("18.55")
-    _fx(monkeypatch, [{"rates": {"MXN": 50.46}}, {"rates": {}}])
+    _fx(monkeypatch, [{"success": True, "payload": {"last": "50.46"}}, {"rates": {}}])
     with pytest.raises(LayoutChanged):
         _bare()._usd_to_mxn()
